@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Panel estadístico · Olist</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0;
+  background: #0d0d0d;
+  color: #c3c2b7;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+body { padding: 24px 28px 48px; }
+header { margin-bottom: 22px; }
+h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; color: #ffffff; }
+header p { margin: 0; font-size: 13px; color: #898781; }
+nav.tabs { margin-top: 14px; display: flex; gap: 8px; }
+nav.tabs a {
+  font-size: 12.5px; color: #c3c2b7; text-decoration: none;
+  padding: 6px 12px; border-radius: 7px; border: 1px solid rgba(255,255,255,0.10);
+}
+nav.tabs a.activa { color: #ffffff; border-color: #3987e5; background: rgba(57,135,229,0.12); }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 16px; }
+.card {
+  background: #1a1a19; border: 1px solid rgba(255,255,255,0.10); border-radius: 10px;
+  padding: 14px 16px;
+}
+.card h3 { margin: 0 0 10px; font-size: 13.5px; font-weight: 600; color: #ffffff; }
+.card canvas { display: block; }
+.card-botones { display: flex; gap: 8px; margin-top: 10px; }
+.card-botones button {
+  flex: 1; font-size: 11.5px; padding: 6px 8px; border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.04);
+  color: #c3c2b7; cursor: pointer;
+}
+.card-botones button:hover { background: rgba(255,255,255,0.10); }
+.ranking { margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.10); font-size: 12px; }
+.ranking b { color: #ffffff; font-size: 12px; display: block; margin-bottom: 6px; }
+.ranking div { display: flex; justify-content: space-between; margin: 3px 0; color: #c3c2b7; }
+footer { margin-top: 28px; font-size: 11.5px; color: #898781; }
+
+</style>
+</head>
+<body>
+<header>
+  <h1>Panel estadístico</h1>
+  <p id="meta-info"></p>
+  <nav class="tabs">
+    <a href="dashboard_flujos.html">Flujos</a>
+    <a class="activa" href="dashboard_estadisticas.html">Estadísticas</a>
+    <a href="mapa_animado.html">Mapa animado</a>
+  </nav>
+</header>
+
+<div class="grid">
+  <div class="card">
+    <h3>Distancia vs. días de entrega</h3>
+    <canvas id="chart-entrega"></canvas>
+    <div class="card-botones">
+      <button id="btn-csv-entrega">CSV</button>
+      <button id="btn-jpeg-entrega">JPEG</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Distancia vs. costo de flete</h3>
+    <canvas id="chart-flete"></canvas>
+    <div class="card-botones">
+      <button id="btn-csv-flete">CSV</button>
+      <button id="btn-jpeg-flete">JPEG</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Atraso vs. satisfacción</h3>
+    <canvas id="chart-atraso"></canvas>
+    <div class="card-botones">
+      <button id="btn-csv-atraso">CSV</button>
+      <button id="btn-jpeg-atraso">JPEG</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>GMV mensual</h3>
+    <canvas id="chart-serie"></canvas>
+    <div class="card-botones">
+      <button id="btn-csv-serie">CSV</button>
+      <button id="btn-jpeg-serie">JPEG</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Top categorías (ticket promedio)</h3>
+    <canvas id="chart-categorias"></canvas>
+    <div class="card-botones">
+      <button id="btn-csv-categorias">CSV</button>
+      <button id="btn-jpeg-categorias">JPEG</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Métodos de pago</h3>
+    <canvas id="chart-pagos"></canvas>
+    <div class="card-botones">
+      <button id="btn-csv-pagos">CSV</button>
+      <button id="btn-jpeg-pagos">JPEG</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Top estados por GMV</h3>
+    <canvas id="chart-estados"></canvas>
+    <div class="card-botones">
+      <button id="btn-csv-estados">CSV</button>
+      <button id="btn-jpeg-estados">JPEG</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Correlación entre variables</h3>
+    <canvas id="chart-correlacion"></canvas>
+    <div class="card-botones">
+      <button id="btn-csv-correlacion">CSV</button>
+      <button id="btn-jpeg-correlacion">JPEG</button>
+    </div>
+  </div>
+</div>
+
+<footer>Geografía de ventas · Dashboard 360 — Olist Brazilian E-commerce · gráficos sin dependencias externas</footer>
+
+<script>
+
+function descargarTextoComoArchivo(texto, nombreArchivo, tipoMime) {
+  const blob = new Blob([texto], { type: tipoMime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = nombreArchivo; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function arrayObjetosACSV(filas) {
+  if (!filas || !filas.length) return '';
+  const columnas = Object.keys(filas[0]);
+  const lineas = [columnas.join(',')];
+  for (const fila of filas) lineas.push(columnas.map(c => fila[c]).join(','));
+  return lineas.join('\n');
+}
+
+function descargarCanvasComoJPEG(canvas, nombreArchivo) {
+  const tmp = document.createElement('canvas');
+  tmp.width = canvas.width; tmp.height = canvas.height;
+  const ctx = tmp.getContext('2d');
+  ctx.fillStyle = '#1a1a19';
+  ctx.fillRect(0, 0, tmp.width, tmp.height);
+  ctx.drawImage(canvas, 0, 0);
+  const a = document.createElement('a');
+  a.href = tmp.toDataURL('image/jpeg', 0.92);
+  a.download = nombreArchivo;
+  a.click();
+}
+
+/* ------------------------------------------------------------------ */
+/* Mini motor de gráficos (Canvas 2D, cero dependencias externas)      */
+/* ------------------------------------------------------------------ */
+
+const MC_COLOR_EJE = '#383835';
+const MC_COLOR_TEXTO = '#c3c2b7';
+
+let mcTooltipEl = null;
+function mcTooltip() {
+  if (!mcTooltipEl) {
+    mcTooltipEl = document.createElement('div');
+    mcTooltipEl.style.cssText =
+      'position:fixed;pointer-events:none;background:#1a1a19;' +
+      'border:1px solid rgba(255,255,255,0.18);border-radius:6px;padding:6px 9px;' +
+      'font-size:11px;color:#ffffff;z-index:50;display:none;white-space:pre-line;' +
+      'box-shadow:0 4px 14px rgba(0,0,0,0.45);max-width:220px;';
+    document.body.appendChild(mcTooltipEl);
+  }
+  return mcTooltipEl;
+}
+function mcMostrarTooltip(clientX, clientY, texto) {
+  const el = mcTooltip();
+  el.textContent = texto;
+  el.style.left = (clientX + 14) + 'px';
+  el.style.top = (clientY + 14) + 'px';
+  el.style.display = 'block';
+}
+function mcOcultarTooltip() { if (mcTooltipEl) mcTooltipEl.style.display = 'none'; }
+
+function mcPrepararCanvas(canvas, alturaCss) {
+  // Resta el padding horizontal de la tarjeta (.card { padding: 14px 16px })
+  // para que el buffer del canvas coincida con su ancho real renderizado.
+  const ancho = Math.max(140, canvas.parentElement.clientWidth - 32);
+  const alto = alturaCss;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.style.width = ancho + 'px';
+  canvas.style.height = alto + 'px';
+  canvas.width = Math.max(1, Math.round(ancho * dpr));
+  canvas.height = Math.max(1, Math.round(alto * dpr));
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, ancho, alto);
+  return { ctx, ancho, alto };
+}
+
+function mcTruncar(ctx, texto, anchoMax) {
+  texto = String(texto);
+  if (ctx.measureText(texto).width <= anchoMax) return texto;
+  let t = texto;
+  while (t.length > 1 && ctx.measureText(t + '…').width > anchoMax) t = t.slice(0, -1);
+  return t + '…';
+}
+
+const MC_REGISTRO_RESIZE = [];
+let mcResizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(mcResizeTimer);
+  mcResizeTimer = setTimeout(() => MC_REGISTRO_RESIZE.forEach(fn => fn()), 150);
+});
+
+function mcColorResuelto(colores, i, porDefecto) {
+  if (typeof colores === 'function') return colores(i);
+  if (Array.isArray(colores)) return colores[i % colores.length];
+  return colores || porDefecto;
+}
+
+function mcBarrasHorizontales(canvas, opciones) {
+  function render() {
+    const n = opciones.valores.length;
+    const alturaFila = opciones.alturaFila || 20;
+    const alto = Math.max(140, n * alturaFila + 26);
+    const { ctx, ancho } = mcPrepararCanvas(canvas, alto);
+    const margenIzq = opciones.margenIzq || 128;
+    const margenDer = 12;
+    const margenSup = 8;
+    const margenInf = 18;
+    const anchoBarras = Math.max(10, ancho - margenIzq - margenDer);
+    const altoBarras = alto - margenSup - margenInf;
+    const filaAlto = altoBarras / Math.max(1, n);
+    const maxValor = Math.max(...opciones.valores, 1);
+
+    ctx.strokeStyle = MC_COLOR_EJE;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(margenIzq + 0.5, margenSup);
+    ctx.lineTo(margenIzq + 0.5, alto - margenInf);
+    ctx.stroke();
+
+    ctx.font = '10px system-ui, sans-serif';
+    ctx.textBaseline = 'middle';
+    const hitboxes = [];
+    for (let i = 0; i < n; i++) {
+      const y = margenSup + i * filaAlto;
+      const h = Math.max(3, filaAlto - 5);
+      const w = (opciones.valores[i] / maxValor) * anchoBarras;
+      const color = mcColorResuelto(opciones.colores, i, '#3987e5');
+      ctx.fillStyle = color;
+      ctx.fillRect(margenIzq, y + (filaAlto - h) / 2, Math.max(1.5, w), h);
+
+      ctx.fillStyle = MC_COLOR_TEXTO;
+      ctx.textAlign = 'right';
+      ctx.fillText(mcTruncar(ctx, opciones.etiquetas[i], margenIzq - 8), margenIzq - 8, y + filaAlto / 2);
+
+      hitboxes.push({ x0: 0, y0: y, x1: ancho, y1: y + filaAlto, i });
+    }
+
+    canvas.onmousemove = (ev) => {
+      const rect = canvas.getBoundingClientRect();
+      const mx = ev.clientX - rect.left, my = ev.clientY - rect.top;
+      const hit = hitboxes.find(h => mx >= h.x0 && mx <= h.x1 && my >= h.y0 && my <= h.y1);
+      if (hit) mcMostrarTooltip(ev.clientX, ev.clientY, opciones.formatoTooltip(hit.i));
+      else mcOcultarTooltip();
+    };
+    canvas.onmouseleave = mcOcultarTooltip;
+  }
+  render();
+  MC_REGISTRO_RESIZE.push(render);
+}
+
+function mcBarrasVerticales(canvas, opciones) {
+  function render() {
+    const alto = opciones.alto || 220;
+    const { ctx, ancho } = mcPrepararCanvas(canvas, alto);
+    const n = opciones.valores.length;
+    const margenIzq = 36, margenDer = 10, margenSup = 10, margenInf = 46;
+    const anchoBarras = Math.max(10, ancho - margenIzq - margenDer);
+    const altoBarras = alto - margenSup - margenInf;
+    const maxValor = Math.max(...opciones.valores, 0.0001);
+    const anchoCol = anchoBarras / Math.max(1, n);
+
+    ctx.strokeStyle = MC_COLOR_EJE;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(margenIzq, margenSup);
+    ctx.lineTo(margenIzq, alto - margenInf);
+    ctx.lineTo(margenIzq + anchoBarras, alto - margenInf);
+    ctx.stroke();
+
+    ctx.font = '9px system-ui, sans-serif';
+    ctx.fillStyle = MC_COLOR_TEXTO;
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(maxValor.toFixed(1), margenIzq - 6, margenSup + 4);
+    ctx.fillText('0', margenIzq - 6, alto - margenInf);
+
+    const hitboxes = [];
+    for (let i = 0; i < n; i++) {
+      const x = margenIzq + i * anchoCol;
+      const h = (opciones.valores[i] / maxValor) * altoBarras;
+      const color = mcColorResuelto(opciones.color, i, '#3987e5');
+      ctx.fillStyle = color;
+      ctx.fillRect(x + 3, alto - margenInf - h, Math.max(1.5, anchoCol - 6), h);
+
+      ctx.save();
+      ctx.fillStyle = MC_COLOR_TEXTO;
+      ctx.textAlign = 'right';
+      ctx.translate(x + anchoCol / 2 + 3, alto - margenInf + 6);
+      ctx.rotate(-Math.PI / 4);
+      ctx.fillText(mcTruncar(ctx, opciones.etiquetas[i], 70), 0, 0);
+      ctx.restore();
+
+      hitboxes.push({ x0: x, y0: margenSup, x1: x + anchoCol, y1: alto - margenInf, i });
+    }
+
+    canvas.onmousemove = (ev) => {
+      const rect = canvas.getBoundingClientRect();
+      const mx = ev.clientX - rect.left, my = ev.clientY - rect.top;
+      const hit = hitboxes.find(h => mx >= h.x0 && mx <= h.x1 && my >= h.y0 && my <= h.y1);
+      if (hit) mcMostrarTooltip(ev.clientX, ev.clientY, opciones.formatoTooltip(hit.i));
+      else mcOcultarTooltip();
+    };
+    canvas.onmouseleave = mcOcultarTooltip;
+  }
+  render();
+  MC_REGISTRO_RESIZE.push(render);
+}
+
+function mcDispersion(canvas, opciones) {
+  function render() {
+    const alto = opciones.alto || 220;
+    const { ctx, ancho } = mcPrepararCanvas(canvas, alto);
+    const margenIzq = 42, margenDer = 12, margenSup = 10, margenInf = 28;
+    const anchoPlot = Math.max(10, ancho - margenIzq - margenDer);
+    const altoPlot = alto - margenSup - margenInf;
+    const xs = opciones.puntos.map(p => p.x), ys = opciones.puntos.map(p => p.y);
+    let xMin = Math.min(...xs), xMax = Math.max(...xs);
+    let yMin = Math.min(...ys), yMax = Math.max(...ys);
+    if (xMin === xMax) xMax = xMin + 1;
+    if (yMin === yMax) yMax = yMin + 1;
+    const escalaX = (v) => margenIzq + ((v - xMin) / (xMax - xMin)) * anchoPlot;
+    const escalaY = (v) => margenSup + altoPlot - ((v - yMin) / (yMax - yMin)) * altoPlot;
+
+    ctx.strokeStyle = MC_COLOR_EJE;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(margenIzq, margenSup);
+    ctx.lineTo(margenIzq, margenSup + altoPlot);
+    ctx.lineTo(margenIzq + anchoPlot, margenSup + altoPlot);
+    ctx.stroke();
+
+    ctx.font = '9px system-ui, sans-serif';
+    ctx.fillStyle = MC_COLOR_TEXTO;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText(xMin.toFixed(0), margenIzq, margenSup + altoPlot + 6);
+    ctx.fillText(xMax.toFixed(0), margenIzq + anchoPlot, margenSup + altoPlot + 6);
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(yMax.toFixed(0), margenIzq - 6, margenSup);
+    ctx.fillText(yMin.toFixed(0), margenIzq - 6, margenSup + altoPlot);
+
+    const puntosPx = opciones.puntos.map(p => ({
+      x: escalaX(p.x), y: escalaY(p.y), r: p.r || 3, orig: p,
+    }));
+    ctx.fillStyle = opciones.color || 'rgba(57,135,229,0.55)';
+    for (const p of puntosPx) {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    canvas.onmousemove = (ev) => {
+      const rect = canvas.getBoundingClientRect();
+      const mx = ev.clientX - rect.left, my = ev.clientY - rect.top;
+      let cercano = null, distMin = 10;
+      for (const p of puntosPx) {
+        const d = Math.hypot(mx - p.x, my - p.y);
+        if (d < Math.max(distMin, p.r + 3)) { cercano = p; distMin = d; }
+      }
+      if (cercano) mcMostrarTooltip(ev.clientX, ev.clientY, opciones.formatoTooltip(cercano.orig));
+      else mcOcultarTooltip();
+    };
+    canvas.onmouseleave = mcOcultarTooltip;
+  }
+  render();
+  MC_REGISTRO_RESIZE.push(render);
+}
+
+function mcLinea(canvas, opciones) {
+  function render() {
+    const alto = opciones.alto || 220;
+    const { ctx, ancho } = mcPrepararCanvas(canvas, alto);
+    const margenIzq = 46, margenDer = 12, margenSup = 12, margenInf = 26;
+    const anchoPlot = Math.max(10, ancho - margenIzq - margenDer);
+    const altoPlot = alto - margenSup - margenInf;
+    const n = opciones.valores.length;
+    const valMin = Math.min(...opciones.valores, 0);
+    const valMax = Math.max(...opciones.valores, 1);
+    const escalaX = (i) => margenIzq + (n <= 1 ? anchoPlot / 2 : (i / (n - 1)) * anchoPlot);
+    const escalaY = (v) => margenSup + altoPlot - ((v - valMin) / (valMax - valMin || 1)) * altoPlot;
+
+    ctx.strokeStyle = MC_COLOR_EJE;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(margenIzq, margenSup);
+    ctx.lineTo(margenIzq, margenSup + altoPlot);
+    ctx.lineTo(margenIzq + anchoPlot, margenSup + altoPlot);
+    ctx.stroke();
+
+    ctx.font = '9px system-ui, sans-serif';
+    ctx.fillStyle = MC_COLOR_TEXTO;
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(valMax.toFixed(0), margenIzq - 6, margenSup);
+    ctx.fillText(valMin.toFixed(0), margenIzq - 6, margenSup + altoPlot);
+
+    const puntos = opciones.valores.map((v, i) => ({ x: escalaX(i), y: escalaY(v), i }));
+
+    ctx.beginPath();
+    ctx.moveTo(puntos[0].x, margenSup + altoPlot);
+    puntos.forEach(p => ctx.lineTo(p.x, p.y));
+    ctx.lineTo(puntos[puntos.length - 1].x, margenSup + altoPlot);
+    ctx.closePath();
+    ctx.fillStyle = opciones.colorRelleno || 'rgba(0,131,0,0.15)';
+    ctx.fill();
+
+    ctx.beginPath();
+    puntos.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+    ctx.strokeStyle = opciones.color || '#008300';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = MC_COLOR_TEXTO;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    const indicesEtiqueta = n > 1 ? [0, Math.floor((n - 1) / 2), n - 1] : [0];
+    indicesEtiqueta.forEach(i => {
+      ctx.fillText(mcTruncar(ctx, opciones.etiquetas[i], 60), puntos[i].x, alto - margenInf + 16);
+    });
+
+    canvas.onmousemove = (ev) => {
+      const rect = canvas.getBoundingClientRect();
+      const mx = ev.clientX - rect.left;
+      let cercano = puntos[0], distMin = Infinity;
+      for (const p of puntos) {
+        const d = Math.abs(mx - p.x);
+        if (d < distMin) { cercano = p; distMin = d; }
+      }
+      if (distMin < 24) mcMostrarTooltip(ev.clientX, ev.clientY, opciones.formatoTooltip(cercano.i));
+      else mcOcultarTooltip();
+    };
+    canvas.onmouseleave = mcOcultarTooltip;
+  }
+  render();
+  MC_REGISTRO_RESIZE.push(render);
+}
+
+function mcDona(canvas, opciones) {
+  function render() {
+    const alto = opciones.alto || 220;
+    const { ctx, ancho } = mcPrepararCanvas(canvas, alto);
+    const total = opciones.valores.reduce((a, b) => a + b, 0) || 1;
+    const cx = ancho / 2, cy = (alto - 34) / 2 + 6;
+    const radioExt = Math.max(20, Math.min(cx, cy) - 10);
+    const radioInt = radioExt * 0.55;
+
+    let anguloActual = -Math.PI / 2;
+    const segmentos = [];
+    opciones.valores.forEach((v, i) => {
+      const angulo = (v / total) * Math.PI * 2;
+      const color = mcColorResuelto(opciones.colores, i, '#3987e5');
+      ctx.beginPath();
+      ctx.arc(cx, cy, radioExt, anguloActual, anguloActual + angulo);
+      ctx.arc(cx, cy, radioInt, anguloActual + angulo, anguloActual, true);
+      ctx.closePath();
+      ctx.fillStyle = color;
+      ctx.fill();
+      segmentos.push({ inicio: anguloActual, fin: anguloActual + angulo, i });
+      anguloActual += angulo;
+    });
+
+    ctx.font = '9.5px system-ui, sans-serif';
+    ctx.textBaseline = 'middle';
+    let ly = alto - 22;
+    let lx = 10;
+    opciones.etiquetas.forEach((etq, i) => {
+      const color = mcColorResuelto(opciones.colores, i, '#3987e5');
+      const anchoTxt = ctx.measureText(etq).width;
+      if (lx + 14 + anchoTxt + 14 > ancho) { lx = 10; ly += 14; }
+      ctx.fillStyle = color;
+      ctx.fillRect(lx, ly - 4, 8, 8);
+      ctx.fillStyle = MC_COLOR_TEXTO;
+      ctx.textAlign = 'left';
+      ctx.fillText(etq, lx + 12, ly);
+      lx += 14 + anchoTxt + 14;
+    });
+
+    canvas.onmousemove = (ev) => {
+      const rect = canvas.getBoundingClientRect();
+      const mx = ev.clientX - rect.left, my = ev.clientY - rect.top;
+      const dx = mx - cx, dy = my - cy;
+      const dist = Math.hypot(dx, dy);
+      if (dist >= radioInt && dist <= radioExt) {
+        let ang = Math.atan2(dy, dx);
+        if (ang < -Math.PI / 2) ang += Math.PI * 2;
+        const seg = segmentos.find(s => ang >= s.inicio && ang <= s.fin);
+        if (seg) { mcMostrarTooltip(ev.clientX, ev.clientY, opciones.formatoTooltip(seg.i)); return; }
+      }
+      mcOcultarTooltip();
+    };
+    canvas.onmouseleave = mcOcultarTooltip;
+  }
+  render();
+  MC_REGISTRO_RESIZE.push(render);
+}
+
+
+const DATA = {"meta": {"total_pedidos": 98666, "gmv_total_fmt": "R$ 15.843.553", "periodo": "2016-09 a 2018-09"}, "stats": {"dispersion_distancia_entrega": [{"count": 16974, "distancia_km": 74.48, "dias_entrega": 3.72}, {"count": 9636, "distancia_km": 128.87, "dias_entrega": 9.13}, {"count": 2263, "distancia_km": 141.13, "dias_entrega": 16.25}, {"count": 668, "distancia_km": 146.71, "dias_entrega": 23.35}, {"count": 226, "distancia_km": 147.59, "dias_entrega": 30.57}, {"count": 91, "distancia_km": 151.83, "dias_entrega": 37.22}, {"count": 67, "distancia_km": 165.99, "dias_entrega": 44.33}, {"count": 17, "distancia_km": 141.76, "dias_entrega": 51.95}, {"count": 9, "distancia_km": 142.23, "dias_entrega": 59.11}, {"count": 9, "distancia_km": 136.6, "dias_entrega": 67.2}, {"count": 7, "distancia_km": 103.21, "dias_entrega": 71.88}, {"count": 1, "distancia_km": 26.49, "dias_entrega": 78.0}, {"count": 2, "distancia_km": 190.23, "dias_entrega": 86.5}, {"count": 1, "distancia_km": 11.78, "dias_entrega": 96.0}, {"count": 4, "distancia_km": 187.59, "dias_entrega": 101.25}, {"count": 3, "distancia_km": 90.85, "dias_entrega": 106.0}, {"count": 3, "distancia_km": 31.34, "dias_entrega": 116.67}, {"count": 1, "distancia_km": 91.69, "dias_entrega": 175.0}, {"count": 1, "distancia_km": 285.08, "dias_entrega": 187.0}, {"count": 1, "distancia_km": 90.56, "dias_entrega": 191.0}, {"count": 6852, "distancia_km": 408.53, "dias_entrega": 4.9}, {"count": 15938, "distancia_km": 416.96, "dias_entrega": 9.56}, {"count": 5584, "distancia_km": 425.84, "dias_entrega": 16.31}, {"count": 1878, "distancia_km": 429.17, "dias_entrega": 23.42}, {"count": 763, "distancia_km": 420.97, "dias_entrega": 30.42}, {"count": 379, "distancia_km": 426.06, "dias_entrega": 37.68}, {"count": 189, "distancia_km": 416.74, "dias_entrega": 44.58}, {"count": 97, "distancia_km": 432.58, "dias_entrega": 51.64}, {"count": 54, "distancia_km": 405.57, "dias_entrega": 58.18}, {"count": 25, "distancia_km": 432.94, "dias_entrega": 65.92}, {"count": 16, "distancia_km": 402.73, "dias_entrega": 72.56}, {"count": 7, "distancia_km": 423.19, "dias_entrega": 79.71}, {"count": 6, "distancia_km": 336.88, "dias_entrega": 85.25}, {"count": 2, "distancia_km": 345.69, "dias_entrega": 94.0}, {"count": 3, "distancia_km": 385.03, "dias_entrega": 101.67}, {"count": 2, "distancia_km": 426.15, "dias_entrega": 107.0}, {"count": 4, "distancia_km": 388.17, "dias_entrega": 129.75}, {"count": 2, "distancia_km": 336.27, "dias_entrega": 144.0}, {"count": 1, "distancia_km": 373.78, "dias_entrega": 173.0}, {"count": 2, "distancia_km": 378.95, "dias_entrega": 208.5}, {"count": 1537, "distancia_km": 726.59, "dias_entrega": 5.11}, {"count": 7336, "distancia_km": 728.14, "dias_entrega": 9.85}, {"count": 3687, "distancia_km": 727.83, "dias_entrega": 16.51}, {"count": 1307, "distancia_km": 727.2, "dias_entrega": 23.38}, {"count": 504, "distancia_km": 728.02, "dias_entrega": 30.51}, {"count": 245, "distancia_km": 713.05, "dias_entrega": 37.41}, {"count": 112, "distancia_km": 723.36, "dias_entrega": 44.56}, {"count": 56, "distancia_km": 711.56, "dias_entrega": 51.76}, {"count": 28, "distancia_km": 708.2, "dias_entrega": 57.94}, {"count": 16, "distancia_km": 720.26, "dias_entrega": 66.35}, {"count": 9, "distancia_km": 704.48, "dias_entrega": 72.67}, {"count": 5, "distancia_km": 746.19, "dias_entrega": 79.6}, {"count": 2, "distancia_km": 726.6, "dias_entrega": 84.5}, {"count": 4, "distancia_km": 687.28, "dias_entrega": 94.8}, {"count": 2, "distancia_km": 658.46, "dias_entrega": 100.5}, {"count": 1, "distancia_km": 663.74, "dias_entrega": 107.0}, {"count": 1, "distancia_km": 856.54, "dias_entrega": 136.0}, {"count": 1, "distancia_km": 785.2, "dias_entrega": 143.0}, {"count": 1, "distancia_km": 669.56, "dias_entrega": 165.0}, {"count": 1, "distancia_km": 863.99, "dias_entrega": 181.0}, {"count": 1, "distancia_km": 858.59, "dias_entrega": 186.0}, {"count": 1, "distancia_km": 828.83, "dias_entrega": 189.0}, {"count": 539, "distancia_km": 961.56, "dias_entrega": 5.29}, {"count": 3364, "distancia_km": 975.31, "dias_entrega": 9.95}, {"count": 1943, "distancia_km": 982.58, "dias_entrega": 16.47}, {"count": 714, "distancia_km": 982.38, "dias_entrega": 23.39}, {"count": 259, "distancia_km": 992.58, "dias_entrega": 30.46}, {"count": 144, "distancia_km": 983.33, "dias_entrega": 37.46}, {"count": 65, "distancia_km": 978.57, "dias_entrega": 44.41}, {"count": 30, "distancia_km": 1021.58, "dias_entrega": 51.61}, {"count": 20, "distancia_km": 971.43, "dias_entrega": 59.08}, {"count": 6, "distancia_km": 1002.84, "dias_entrega": 65.29}, {"count": 3, "distancia_km": 1056.64, "dias_entrega": 71.67}, {"count": 1, "distancia_km": 1083.01, "dias_entrega": 78.0}, {"count": 1, "distancia_km": 966.28, "dias_entrega": 86.0}, {"count": 1, "distancia_km": 1130.54, "dias_entrega": 124.0}, {"count": 1, "distancia_km": 894.17, "dias_entrega": 133.0}, {"count": 1, "distancia_km": 1028.07, "dias_entrega": 141.0}, {"count": 1, "distancia_km": 909.27, "dias_entrega": 148.0}, {"count": 1, "distancia_km": 1024.22, "dias_entrega": 168.0}, {"count": 1, "distancia_km": 1066.39, "dias_entrega": 182.0}, {"count": 110, "distancia_km": 1295.07, "dias_entrega": 4.85}, {"count": 1079, "distancia_km": 1285.04, "dias_entrega": 10.44}, {"count": 979, "distancia_km": 1289.5, "dias_entrega": 16.74}, {"count": 441, "distancia_km": 1299.07, "dias_entrega": 23.34}, {"count": 181, "distancia_km": 1297.94, "dias_entrega": 30.81}, {"count": 78, "distancia_km": 1278.83, "dias_entrega": 37.65}, {"count": 42, "distancia_km": 1284.72, "dias_entrega": 44.85}, {"count": 13, "distancia_km": 1299.25, "dias_entrega": 51.43}, {"count": 7, "distancia_km": 1243.61, "dias_entrega": 57.25}, {"count": 7, "distancia_km": 1312.57, "dias_entrega": 65.18}, {"count": 3, "distancia_km": 1338.48, "dias_entrega": 74.33}, {"count": 2, "distancia_km": 1279.72, "dias_entrega": 79.0}, {"count": 1, "distancia_km": 1198.62, "dias_entrega": 99.0}, {"count": 2, "distancia_km": 1252.33, "dias_entrega": 108.0}, {"count": 1, "distancia_km": 1293.39, "dias_entrega": 130.0}, {"count": 1, "distancia_km": 1399.02, "dias_entrega": 146.0}, {"count": 1, "distancia_km": 1158.24, "dias_entrega": 167.0}, {"count": 75, "distancia_km": 1538.97, "dias_entrega": 5.24}, {"count": 894, "distancia_km": 1548.35, "dias_entrega": 10.27}, {"count": 825, "distancia_km": 1553.85, "dias_entrega": 16.71}, {"count": 406, "distancia_km": 1559.45, "dias_entrega": 23.5}, {"count": 191, "distancia_km": 1550.96, "dias_entrega": 30.12}, {"count": 74, "distancia_km": 1569.93, "dias_entrega": 37.56}, {"count": 47, "distancia_km": 1578.6, "dias_entrega": 44.56}, {"count": 15, "distancia_km": 1592.15, "dias_entrega": 51.8}, {"count": 5, "distancia_km": 1592.76, "dias_entrega": 58.6}, {"count": 2, "distancia_km": 1579.34, "dias_entrega": 68.0}, {"count": 2, "distancia_km": 1626.06, "dias_entrega": 75.5}, {"count": 2, "distancia_km": 1513.03, "dias_entrega": 82.5}, {"count": 1, "distancia_km": 1576.57, "dias_entrega": 106.0}, {"count": 1, "distancia_km": 1497.85, "dias_entrega": 135.0}, {"count": 1, "distancia_km": 1527.28, "dias_entrega": 167.0}, {"count": 1, "distancia_km": 1475.19, "dias_entrega": 194.0}, {"count": 23, "distancia_km": 1909.0, "dias_entrega": 4.96}, {"count": 552, "distancia_km": 1891.13, "dias_entrega": 10.52}, {"count": 637, "distancia_km": 1890.66, "dias_entrega": 16.64}, {"count": 333, "distancia_km": 1894.5, "dias_entrega": 23.46}, {"count": 167, "distancia_km": 1897.23, "dias_entrega": 30.57}, {"count": 83, "distancia_km": 1883.51, "dias_entrega": 37.46}, {"count": 37, "distancia_km": 1894.69, "dias_entrega": 44.64}, {"count": 28, "distancia_km": 1912.45, "dias_entrega": 50.76}, {"count": 4, "distancia_km": 1921.35, "dias_entrega": 59.25}, {"count": 4, "distancia_km": 1859.48, "dias_entrega": 66.0}, {"count": 4, "distancia_km": 1876.56, "dias_entrega": 70.75}, {"count": 4, "distancia_km": 1849.76, "dias_entrega": 80.8}, {"count": 2, "distancia_km": 1783.85, "dias_entrega": 86.0}, {"count": 1, "distancia_km": 1823.9, "dias_entrega": 188.0}, {"count": 52, "distancia_km": 2132.35, "dias_entrega": 5.34}, {"count": 814, "distancia_km": 2155.24, "dias_entrega": 10.61}, {"count": 980, "distancia_km": 2165.18, "dias_entrega": 16.73}, {"count": 573, "distancia_km": 2168.98, "dias_entrega": 23.6}, {"count": 227, "distancia_km": 2165.53, "dias_entrega": 30.82}, {"count": 125, "distancia_km": 2161.79, "dias_entrega": 37.47}, {"count": 82, "distancia_km": 2174.64, "dias_entrega": 44.77}, {"count": 34, "distancia_km": 2172.45, "dias_entrega": 51.25}, {"count": 12, "distancia_km": 2166.55, "dias_entrega": 58.64}, {"count": 5, "distancia_km": 2088.22, "dias_entrega": 66.4}, {"count": 5, "distancia_km": 2203.63, "dias_entrega": 72.2}, {"count": 2, "distancia_km": 2287.48, "dias_entrega": 77.5}, {"count": 3, "distancia_km": 2099.78, "dias_entrega": 86.33}, {"count": 2, "distancia_km": 2232.36, "dias_entrega": 102.5}, {"count": 1, "distancia_km": 2253.85, "dias_entrega": 110.0}, {"count": 1, "distancia_km": 2289.16, "dias_entrega": 126.0}, {"count": 1, "distancia_km": 2232.82, "dias_entrega": 138.0}, {"count": 1, "distancia_km": 2175.15, "dias_entrega": 142.0}, {"count": 1, "distancia_km": 2139.88, "dias_entrega": 166.0}, {"count": 1, "distancia_km": 2172.72, "dias_entrega": 174.0}, {"count": 3, "distancia_km": 2103.45, "dias_entrega": 194.33}, {"count": 38, "distancia_km": 2379.19, "dias_entrega": 5.17}, {"count": 485, "distancia_km": 2404.25, "dias_entrega": 10.47}, {"count": 578, "distancia_km": 2404.55, "dias_entrega": 16.75}, {"count": 394, "distancia_km": 2415.51, "dias_entrega": 23.67}, {"count": 185, "distancia_km": 2418.93, "dias_entrega": 30.9}, {"count": 78, "distancia_km": 2431.3, "dias_entrega": 37.99}, {"count": 49, "distancia_km": 2413.92, "dias_entrega": 44.65}, {"count": 26, "distancia_km": 2424.58, "dias_entrega": 51.19}, {"count": 6, "distancia_km": 2403.95, "dias_entrega": 58.67}, {"count": 5, "distancia_km": 2432.1, "dias_entrega": 65.0}, {"count": 6, "distancia_km": 2371.94, "dias_entrega": 72.33}, {"count": 2, "distancia_km": 2350.03, "dias_entrega": 80.5}, {"count": 1, "distancia_km": 2372.32, "dias_entrega": 91.0}, {"count": 1, "distancia_km": 2367.18, "dias_entrega": 138.0}, {"count": 1, "distancia_km": 2435.15, "dias_entrega": 187.0}, {"count": 9, "distancia_km": 2701.75, "dias_entrega": 5.1}, {"count": 90, "distancia_km": 2729.75, "dias_entrega": 10.85}, {"count": 142, "distancia_km": 2709.33, "dias_entrega": 16.78}, {"count": 107, "distancia_km": 2710.65, "dias_entrega": 23.87}, {"count": 71, "distancia_km": 2701.99, "dias_entrega": 30.84}, {"count": 29, "distancia_km": 2686.71, "dias_entrega": 37.47}, {"count": 15, "distancia_km": 2719.81, "dias_entrega": 44.56}, {"count": 2, "distancia_km": 2753.56, "dias_entrega": 49.5}, {"count": 3, "distancia_km": 2740.3, "dias_entrega": 57.0}, {"count": 1, "distancia_km": 2674.39, "dias_entrega": 63.0}, {"count": 2, "distancia_km": 2737.25, "dias_entrega": 71.0}, {"count": 1, "distancia_km": 2772.86, "dias_entrega": 90.0}, {"count": 1, "distancia_km": 2619.38, "dias_entrega": 168.0}, {"count": 4, "distancia_km": 3029.65, "dias_entrega": 5.0}, {"count": 38, "distancia_km": 3063.54, "dias_entrega": 10.93}, {"count": 30, "distancia_km": 3056.3, "dias_entrega": 15.94}, {"count": 26, "distancia_km": 3001.16, "dias_entrega": 23.23}, {"count": 16, "distancia_km": 3080.9, "dias_entrega": 29.68}, {"count": 11, "distancia_km": 3064.86, "dias_entrega": 37.82}, {"count": 4, "distancia_km": 3033.97, "dias_entrega": 45.0}, {"count": 1, "distancia_km": 3034.68, "dias_entrega": 53.0}, {"count": 1, "distancia_km": 3142.49, "dias_entrega": 57.0}, {"count": 2, "distancia_km": 3006.81, "dias_entrega": 72.0}, {"count": 1, "distancia_km": 3305.53, "dias_entrega": 6.0}, {"count": 11, "distancia_km": 3273.79, "dias_entrega": 10.0}, {"count": 12, "distancia_km": 3251.32, "dias_entrega": 15.92}, {"count": 13, "distancia_km": 3290.48, "dias_entrega": 23.85}, {"count": 7, "distancia_km": 3327.5, "dias_entrega": 30.75}, {"count": 4, "distancia_km": 3243.81, "dias_entrega": 37.5}, {"count": 2, "distancia_km": 3315.77, "dias_entrega": 53.0}, {"count": 1, "distancia_km": 3228.57, "dias_entrega": 66.0}, {"count": 1, "distancia_km": 3319.14, "dias_entrega": 71.0}, {"count": 1, "distancia_km": 3301.6, "dias_entrega": 172.0}, {"count": 1, "distancia_km": 3509.07, "dias_entrega": 14.0}, {"count": 1, "distancia_km": 3543.88, "dias_entrega": 24.0}, {"count": 1, "distancia_km": 3927.41, "dias_entrega": 21.0}, {"count": 1, "distancia_km": 4791.61, "dias_entrega": 27.0}, {"count": 1, "distancia_km": 5338.62, "dias_entrega": 25.0}, {"count": 1, "distancia_km": 5338.62, "dias_entrega": 29.0}, {"count": 1, "distancia_km": 8677.91, "dias_entrega": 27.0}], "dispersion_distancia_flete": [{"count": 21237, "distancia_km": 78.24, "freight_value": 9.83}, {"count": 8015, "distancia_km": 151.98, "freight_value": 17.35}, {"count": 989, "distancia_km": 114.76, "freight_value": 33.67}, {"count": 361, "distancia_km": 143.71, "freight_value": 46.14}, {"count": 184, "distancia_km": 146.83, "freight_value": 60.8}, {"count": 66, "distancia_km": 138.45, "freight_value": 74.17}, {"count": 45, "distancia_km": 127.62, "freight_value": 87.62}, {"count": 19, "distancia_km": 137.08, "freight_value": 100.84}, {"count": 8, "distancia_km": 191.75, "freight_value": 116.65}, {"count": 9, "distancia_km": 182.0, "freight_value": 130.22}, {"count": 3, "distancia_km": 209.73, "freight_value": 144.18}, {"count": 1, "distancia_km": 203.57, "freight_value": 174.49}, {"count": 2, "distancia_km": 230.23, "freight_value": 182.16}, {"count": 1, "distancia_km": 241.64, "freight_value": 321.46}, {"count": 5438, "distancia_km": 391.98, "freight_value": 11.44}, {"count": 24334, "distancia_km": 424.1, "freight_value": 17.33}, {"count": 1493, "distancia_km": 409.49, "freight_value": 33.35}, {"count": 763, "distancia_km": 413.9, "freight_value": 46.37}, {"count": 423, "distancia_km": 414.51, "freight_value": 61.28}, {"count": 160, "distancia_km": 417.38, "freight_value": 74.09}, {"count": 107, "distancia_km": 425.95, "freight_value": 87.95}, {"count": 72, "distancia_km": 435.46, "freight_value": 101.33}, {"count": 33, "distancia_km": 401.39, "freight_value": 115.58}, {"count": 26, "distancia_km": 430.63, "freight_value": 128.58}, {"count": 22, "distancia_km": 431.27, "freight_value": 142.93}, {"count": 16, "distancia_km": 442.74, "freight_value": 157.8}, {"count": 8, "distancia_km": 421.18, "freight_value": 169.87}, {"count": 1, "distancia_km": 509.45, "freight_value": 187.43}, {"count": 5, "distancia_km": 424.93, "freight_value": 195.64}, {"count": 1, "distancia_km": 327.63, "freight_value": 207.78}, {"count": 1, "distancia_km": 498.6, "freight_value": 252.35}, {"count": 1, "distancia_km": 415.45, "freight_value": 267.08}, {"count": 1, "distancia_km": 391.31, "freight_value": 306.06}, {"count": 1, "distancia_km": 433.07, "freight_value": 322.1}, {"count": 2, "distancia_km": 453.23, "freight_value": 375.28}, {"count": 568, "distancia_km": 697.99, "freight_value": 8.47}, {"count": 12871, "distancia_km": 727.74, "freight_value": 18.14}, {"count": 934, "distancia_km": 739.94, "freight_value": 32.71}, {"count": 413, "distancia_km": 732.46, "freight_value": 46.47}, {"count": 250, "distancia_km": 724.14, "freight_value": 60.91}, {"count": 111, "distancia_km": 737.22, "freight_value": 73.33}, {"count": 60, "distancia_km": 721.62, "freight_value": 87.51}, {"count": 53, "distancia_km": 727.02, "freight_value": 101.06}, {"count": 16, "distancia_km": 712.03, "freight_value": 116.16}, {"count": 24, "distancia_km": 736.97, "freight_value": 127.89}, {"count": 17, "distancia_km": 743.62, "freight_value": 144.52}, {"count": 5, "distancia_km": 738.82, "freight_value": 155.13}, {"count": 6, "distancia_km": 778.21, "freight_value": 171.74}, {"count": 5, "distancia_km": 752.45, "freight_value": 183.06}, {"count": 4, "distancia_km": 727.49, "freight_value": 196.98}, {"count": 2, "distancia_km": 709.03, "freight_value": 212.24}, {"count": 3, "distancia_km": 716.32, "freight_value": 224.47}, {"count": 1, "distancia_km": 660.7, "freight_value": 244.34}, {"count": 1, "distancia_km": 783.34, "freight_value": 250.42}, {"count": 1, "distancia_km": 703.56, "freight_value": 269.0}, {"count": 1, "distancia_km": 850.91, "freight_value": 294.76}, {"count": 1, "distancia_km": 632.25, "freight_value": 321.88}, {"count": 1, "distancia_km": 617.55, "freight_value": 339.59}, {"count": 142, "distancia_km": 983.44, "freight_value": 6.51}, {"count": 5938, "distancia_km": 973.45, "freight_value": 18.76}, {"count": 661, "distancia_km": 1002.46, "freight_value": 32.51}, {"count": 256, "distancia_km": 992.1, "freight_value": 46.81}, {"count": 117, "distancia_km": 979.53, "freight_value": 61.22}, {"count": 74, "distancia_km": 1016.33, "freight_value": 73.13}, {"count": 40, "distancia_km": 1011.88, "freight_value": 86.99}, {"count": 18, "distancia_km": 1018.67, "freight_value": 100.76}, {"count": 14, "distancia_km": 1031.05, "freight_value": 115.89}, {"count": 10, "distancia_km": 1051.09, "freight_value": 130.14}, {"count": 7, "distancia_km": 953.25, "freight_value": 147.95}, {"count": 2, "distancia_km": 1084.24, "freight_value": 158.76}, {"count": 4, "distancia_km": 1010.59, "freight_value": 166.91}, {"count": 2, "distancia_km": 1147.86, "freight_value": 188.41}, {"count": 1, "distancia_km": 895.68, "freight_value": 194.31}, {"count": 1, "distancia_km": 1036.74, "freight_value": 211.66}, {"count": 1, "distancia_km": 887.43, "freight_value": 222.38}, {"count": 1, "distancia_km": 996.49, "freight_value": 234.78}, {"count": 2, "distancia_km": 1071.96, "freight_value": 255.34}, {"count": 56, "distancia_km": 1303.89, "freight_value": 5.16}, {"count": 2067, "distancia_km": 1289.85, "freight_value": 20.2}, {"count": 560, "distancia_km": 1291.11, "freight_value": 33.11}, {"count": 168, "distancia_km": 1287.74, "freight_value": 47.34}, {"count": 79, "distancia_km": 1275.3, "freight_value": 59.91}, {"count": 38, "distancia_km": 1286.62, "freight_value": 74.33}, {"count": 25, "distancia_km": 1284.74, "freight_value": 87.53}, {"count": 10, "distancia_km": 1281.1, "freight_value": 102.29}, {"count": 10, "distancia_km": 1305.58, "freight_value": 116.24}, {"count": 9, "distancia_km": 1292.22, "freight_value": 128.81}, {"count": 4, "distancia_km": 1301.41, "freight_value": 144.22}, {"count": 4, "distancia_km": 1355.1, "freight_value": 156.54}, {"count": 2, "distancia_km": 1263.93, "freight_value": 185.71}, {"count": 3, "distancia_km": 1233.36, "freight_value": 197.82}, {"count": 1, "distancia_km": 1266.48, "freight_value": 293.27}, {"count": 34, "distancia_km": 1509.29, "freight_value": 6.54}, {"count": 1744, "distancia_km": 1540.13, "freight_value": 20.49}, {"count": 493, "distancia_km": 1577.69, "freight_value": 34.05}, {"count": 190, "distancia_km": 1589.16, "freight_value": 48.73}, {"count": 70, "distancia_km": 1587.72, "freight_value": 60.22}, {"count": 44, "distancia_km": 1623.98, "freight_value": 73.73}, {"count": 29, "distancia_km": 1551.71, "freight_value": 86.16}, {"count": 11, "distancia_km": 1576.34, "freight_value": 103.18}, {"count": 7, "distancia_km": 1633.0, "freight_value": 115.83}, {"count": 8, "distancia_km": 1540.26, "freight_value": 129.73}, {"count": 2, "distancia_km": 1512.79, "freight_value": 147.96}, {"count": 1, "distancia_km": 1452.16, "freight_value": 157.5}, {"count": 1, "distancia_km": 1610.4, "freight_value": 164.84}, {"count": 1, "distancia_km": 1599.27, "freight_value": 185.73}, {"count": 2, "distancia_km": 1626.74, "freight_value": 193.58}, {"count": 1, "distancia_km": 1546.69, "freight_value": 237.11}, {"count": 1, "distancia_km": 1498.34, "freight_value": 255.92}, {"count": 1, "distancia_km": 1689.12, "freight_value": 314.4}, {"count": 1, "distancia_km": 1708.13, "freight_value": 338.3}, {"count": 38, "distancia_km": 1883.16, "freight_value": 5.4}, {"count": 699, "distancia_km": 1890.53, "freight_value": 23.26}, {"count": 711, "distancia_km": 1895.97, "freight_value": 34.73}, {"count": 271, "distancia_km": 1894.12, "freight_value": 48.39}, {"count": 99, "distancia_km": 1889.62, "freight_value": 60.03}, {"count": 39, "distancia_km": 1869.2, "freight_value": 73.36}, {"count": 32, "distancia_km": 1890.32, "freight_value": 87.21}, {"count": 15, "distancia_km": 1880.92, "freight_value": 103.05}, {"count": 12, "distancia_km": 1878.11, "freight_value": 115.03}, {"count": 7, "distancia_km": 1929.85, "freight_value": 130.6}, {"count": 5, "distancia_km": 1864.12, "freight_value": 142.85}, {"count": 2, "distancia_km": 1790.35, "freight_value": 157.82}, {"count": 1, "distancia_km": 1875.4, "freight_value": 165.32}, {"count": 2, "distancia_km": 1985.27, "freight_value": 182.06}, {"count": 4, "distancia_km": 1949.75, "freight_value": 194.06}, {"count": 3, "distancia_km": 1784.75, "freight_value": 214.06}, {"count": 1, "distancia_km": 1991.97, "freight_value": 227.57}, {"count": 3, "distancia_km": 1937.14, "freight_value": 236.86}, {"count": 3, "distancia_km": 1926.42, "freight_value": 253.41}, {"count": 1, "distancia_km": 1880.12, "freight_value": 262.72}, {"count": 1, "distancia_km": 1762.87, "freight_value": 284.6}, {"count": 1, "distancia_km": 1864.72, "freight_value": 409.68}, {"count": 48, "distancia_km": 2170.33, "freight_value": 5.75}, {"count": 1249, "distancia_km": 2156.46, "freight_value": 22.8}, {"count": 1039, "distancia_km": 2170.81, "freight_value": 33.72}, {"count": 394, "distancia_km": 2162.21, "freight_value": 47.66}, {"count": 166, "distancia_km": 2156.82, "freight_value": 60.72}, {"count": 45, "distancia_km": 2158.84, "freight_value": 72.89}, {"count": 41, "distancia_km": 2148.07, "freight_value": 87.53}, {"count": 18, "distancia_km": 2156.26, "freight_value": 103.18}, {"count": 19, "distancia_km": 2158.29, "freight_value": 115.93}, {"count": 7, "distancia_km": 2214.34, "freight_value": 131.78}, {"count": 5, "distancia_km": 2129.08, "freight_value": 146.03}, {"count": 4, "distancia_km": 2241.24, "freight_value": 160.91}, {"count": 6, "distancia_km": 2205.05, "freight_value": 171.42}, {"count": 2, "distancia_km": 2181.6, "freight_value": 196.59}, {"count": 3, "distancia_km": 2175.65, "freight_value": 213.15}, {"count": 2, "distancia_km": 2105.51, "freight_value": 222.92}, {"count": 1, "distancia_km": 2127.61, "freight_value": 232.69}, {"count": 3, "distancia_km": 2131.9, "freight_value": 249.79}, {"count": 1, "distancia_km": 2133.51, "freight_value": 299.16}, {"count": 2, "distancia_km": 2187.28, "freight_value": 313.22}, {"count": 17, "distancia_km": 2389.65, "freight_value": 8.13}, {"count": 1023, "distancia_km": 2401.48, "freight_value": 21.59}, {"count": 492, "distancia_km": 2406.36, "freight_value": 32.5}, {"count": 207, "distancia_km": 2438.93, "freight_value": 46.37}, {"count": 97, "distancia_km": 2425.09, "freight_value": 62.06}, {"count": 30, "distancia_km": 2412.76, "freight_value": 72.67}, {"count": 21, "distancia_km": 2433.61, "freight_value": 87.76}, {"count": 14, "distancia_km": 2432.86, "freight_value": 101.82}, {"count": 8, "distancia_km": 2425.98, "freight_value": 115.84}, {"count": 9, "distancia_km": 2466.83, "freight_value": 129.97}, {"count": 2, "distancia_km": 2360.27, "freight_value": 144.29}, {"count": 3, "distancia_km": 2387.8, "freight_value": 153.28}, {"count": 1, "distancia_km": 2360.77, "freight_value": 173.23}, {"count": 5, "distancia_km": 2400.06, "freight_value": 184.72}, {"count": 1, "distancia_km": 2596.75, "freight_value": 193.28}, {"count": 3, "distancia_km": 2731.22, "freight_value": 9.0}, {"count": 144, "distancia_km": 2693.86, "freight_value": 24.0}, {"count": 165, "distancia_km": 2715.11, "freight_value": 31.57}, {"count": 82, "distancia_km": 2717.33, "freight_value": 46.21}, {"count": 46, "distancia_km": 2713.57, "freight_value": 61.84}, {"count": 9, "distancia_km": 2727.06, "freight_value": 74.57}, {"count": 18, "distancia_km": 2750.16, "freight_value": 87.46}, {"count": 8, "distancia_km": 2752.6, "freight_value": 103.13}, {"count": 2, "distancia_km": 2744.66, "freight_value": 110.28}, {"count": 3, "distancia_km": 2725.1, "freight_value": 127.93}, {"count": 2, "distancia_km": 2736.74, "freight_value": 141.84}, {"count": 1, "distancia_km": 2668.75, "freight_value": 162.08}, {"count": 3, "distancia_km": 2669.07, "freight_value": 170.36}, {"count": 1, "distancia_km": 2769.89, "freight_value": 210.09}, {"count": 1, "distancia_km": 2815.82, "freight_value": 245.75}, {"count": 1, "distancia_km": 2819.65, "freight_value": 317.47}, {"count": 5, "distancia_km": 3093.24, "freight_value": 19.76}, {"count": 64, "distancia_km": 3070.21, "freight_value": 34.0}, {"count": 13, "distancia_km": 3043.68, "freight_value": 47.19}, {"count": 25, "distancia_km": 3007.57, "freight_value": 61.2}, {"count": 8, "distancia_km": 2978.62, "freight_value": 76.14}, {"count": 13, "distancia_km": 3079.76, "freight_value": 85.25}, {"count": 1, "distancia_km": 3077.18, "freight_value": 99.3}, {"count": 1, "distancia_km": 2948.23, "freight_value": 109.96}, {"count": 2, "distancia_km": 3044.92, "freight_value": 141.23}, {"count": 1, "distancia_km": 2956.17, "freight_value": 175.55}, {"count": 1, "distancia_km": 2905.49, "freight_value": 192.48}, {"count": 7, "distancia_km": 3280.76, "freight_value": 25.46}, {"count": 34, "distancia_km": 3276.5, "freight_value": 31.78}, {"count": 10, "distancia_km": 3296.39, "freight_value": 45.36}, {"count": 5, "distancia_km": 3237.75, "freight_value": 60.86}, {"count": 1, "distancia_km": 3187.63, "freight_value": 81.85}, {"count": 1, "distancia_km": 3359.27, "freight_value": 84.39}, {"count": 1, "distancia_km": 3543.88, "freight_value": 38.04}, {"count": 1, "distancia_km": 3509.07, "freight_value": 47.09}, {"count": 1, "distancia_km": 3579.89, "freight_value": 84.94}, {"count": 1, "distancia_km": 3927.41, "freight_value": 34.88}, {"count": 1, "distancia_km": 4791.61, "freight_value": 20.8}, {"count": 2, "distancia_km": 5338.62, "freight_value": 29.24}, {"count": 1, "distancia_km": 8677.91, "freight_value": 25.6}], "atraso_vs_satisfaccion": [{"bucket_atraso": "<-7d (muy anticipado)", "review_prom": 4.23, "n_pedidos": 75744}, {"bucket_atraso": "-7 a -3d", "review_prom": 4.13, "n_pedidos": 9429}, {"bucket_atraso": "-3 a 0d", "review_prom": 4.06, "n_pedidos": 4270}, {"bucket_atraso": "0 a 3d (tarde)", "review_prom": 3.23, "n_pedidos": 1852}, {"bucket_atraso": "3 a 7d", "review_prom": 2.09, "n_pedidos": 1748}, {"bucket_atraso": ">7d (muy tarde)", "review_prom": 1.68, "n_pedidos": 2745}], "serie_tiempo_ventas": [{"mes_compra": "2016-09", "gmv": 354.75, "pedidos": 3}, {"mes_compra": "2016-10", "gmv": 56808.84, "pedidos": 308}, {"mes_compra": "2016-12", "gmv": 19.62, "pedidos": 1}, {"mes_compra": "2017-01", "gmv": 137188.49, "pedidos": 789}, {"mes_compra": "2017-02", "gmv": 286280.62, "pedidos": 1733}, {"mes_compra": "2017-03", "gmv": 432048.59, "pedidos": 2641}, {"mes_compra": "2017-04", "gmv": 412422.24, "pedidos": 2391}, {"mes_compra": "2017-05", "gmv": 586190.95, "pedidos": 3660}, {"mes_compra": "2017-06", "gmv": 502963.04, "pedidos": 3217}, {"mes_compra": "2017-07", "gmv": 584971.62, "pedidos": 3969}, {"mes_compra": "2017-08", "gmv": 668204.6, "pedidos": 4293}, {"mes_compra": "2017-09", "gmv": 720398.91, "pedidos": 4243}, {"mes_compra": "2017-10", "gmv": 769312.37, "pedidos": 4568}, {"mes_compra": "2017-11", "gmv": 1179143.77, "pedidos": 7451}, {"mes_compra": "2017-12", "gmv": 863547.23, "pedidos": 5624}, {"mes_compra": "2018-01", "gmv": 1107301.89, "pedidos": 7220}, {"mes_compra": "2018-02", "gmv": 986908.96, "pedidos": 6694}, {"mes_compra": "2018-03", "gmv": 1155126.82, "pedidos": 7188}, {"mes_compra": "2018-04", "gmv": 1159698.04, "pedidos": 6934}, {"mes_compra": "2018-05", "gmv": 1149781.82, "pedidos": 6853}, {"mes_compra": "2018-06", "gmv": 1022677.11, "pedidos": 6160}, {"mes_compra": "2018-07", "gmv": 1058728.03, "pedidos": 6273}, {"mes_compra": "2018-08", "gmv": 1003308.47, "pedidos": 6452}, {"mes_compra": "2018-09", "gmv": 166.46, "pedidos": 1}], "top_categorias": [{"product_category_name_english": "bed_bath_table", "ticket_prom": 111.71, "review_prom": 3.9, "volumen": 9417}, {"product_category_name_english": "health_beauty", "ticket_prom": 149.04, "review_prom": 4.14, "volumen": 8836}, {"product_category_name_english": "sports_leisure", "ticket_prom": 133.86, "review_prom": 4.11, "volumen": 7720}, {"product_category_name_english": "computers_accessories", "ticket_prom": 135.34, "review_prom": 3.93, "volumen": 6689}, {"product_category_name_english": "furniture_decor", "ticket_prom": 108.29, "review_prom": 3.91, "volumen": 6449}, {"product_category_name_english": "housewares", "ticket_prom": 111.77, "review_prom": 4.05, "volumen": 5884}, {"product_category_name_english": "watches_gifts", "ticket_prom": 217.92, "review_prom": 4.02, "volumen": 5624}, {"product_category_name_english": "telephony", "ticket_prom": 86.88, "review_prom": 3.95, "volumen": 4199}, {"product_category_name_english": "auto", "ticket_prom": 161.84, "review_prom": 4.07, "volumen": 3897}, {"product_category_name_english": "toys", "ticket_prom": 136.35, "review_prom": 4.16, "volumen": 3886}], "metodos_pago": [{"payment_type": "credit_card", "n_pagos": 76505, "cuotas_prom": 3.51, "valor_prom": 163.32}, {"payment_type": "boleto", "n_pagos": 19784, "cuotas_prom": 1.0, "valor_prom": 145.03}, {"payment_type": "voucher", "n_pagos": 3866, "cuotas_prom": 1.0, "valor_prom": 65.7}, {"payment_type": "debit_card", "n_pagos": 1528, "cuotas_prom": 1.0, "valor_prom": 142.57}, {"payment_type": "not_defined", "n_pagos": 3, "cuotas_prom": 1.0, "valor_prom": 0.0}], "top_estados_gmv": [{"customer_state": "SP", "gmv": 5921678.12, "pedidos": 41375}, {"customer_state": "RJ", "gmv": 2129681.98, "pedidos": 12762}, {"customer_state": "MG", "gmv": 1856161.49, "pedidos": 11544}, {"customer_state": "RS", "gmv": 885826.76, "pedidos": 5432}, {"customer_state": "PR", "gmv": 800935.44, "pedidos": 4998}, {"customer_state": "BA", "gmv": 611506.67, "pedidos": 3358}, {"customer_state": "SC", "gmv": 610213.6, "pedidos": 3612}, {"customer_state": "DF", "gmv": 353229.44, "pedidos": 2125}, {"customer_state": "GO", "gmv": 347706.93, "pedidos": 2007}, {"customer_state": "ES", "gmv": 324801.91, "pedidos": 2025}], "matriz_correlacion": {"columnas": ["price", "freight_value", "distancia_km", "dias_entrega", "review_score", "payment_installments"], "datos": [[1.0, 0.41, 0.08, 0.06, -0.0, 0.29], [0.41, 1.0, 0.39, 0.21, -0.04, 0.19], [0.08, 0.39, 1.0, 0.39, -0.05, 0.09], [0.06, 0.21, 0.39, 1.0, -0.3, 0.04], [-0.0, -0.04, -0.05, -0.3, 1.0, -0.04], [0.29, 0.19, 0.09, 0.04, -0.04, 1.0]]}}};
+
+document.getElementById('meta-info').textContent =
+  `${DATA.meta.total_pedidos.toLocaleString('es-CL')} pedidos · GMV ${DATA.meta.gmv_total_fmt} · ${DATA.meta.periodo}`;
+
+function registrarDescargas(idBtnCsv, idBtnJpeg, canvas, filas, nombreBase) {
+  document.getElementById(idBtnCsv).addEventListener('click', () => {
+    descargarTextoComoArchivo(arrayObjetosACSV(filas), nombreBase + '.csv', 'text/csv');
+  });
+  document.getElementById(idBtnJpeg).addEventListener('click', () => {
+    descargarCanvasComoJPEG(canvas, nombreBase + '.jpeg');
+  });
+}
+
+// 1. Distancia vs. días de entrega
+(() => {
+  const d = DATA.stats.dispersion_distancia_entrega;
+  const canvas = document.getElementById('chart-entrega');
+  mcDispersion(canvas, {
+    puntos: d.map(x => ({ x: x.distancia_km, y: x.dias_entrega, r: Math.max(2, Math.log2((x.count || 1) + 1) * 1.6), count: x.count })),
+    color: 'rgba(57,135,229,0.55)',
+    formatoTooltip: (p) => `Distancia: ${p.x} km\nDías entrega: ${p.y}\nPedidos: ${p.count != null ? p.count : '-'}`,
+  });
+  registrarDescargas('btn-csv-entrega', 'btn-jpeg-entrega', canvas, d, 'dispersion_distancia_entrega');
+})();
+
+// 2. Distancia vs. costo de flete
+(() => {
+  const d = DATA.stats.dispersion_distancia_flete;
+  const canvas = document.getElementById('chart-flete');
+  mcDispersion(canvas, {
+    puntos: d.map(x => ({ x: x.distancia_km, y: x.freight_value, r: Math.max(2, Math.log2((x.count || 1) + 1) * 1.6), count: x.count })),
+    color: 'rgba(217,89,38,0.55)',
+    formatoTooltip: (p) => `Distancia: ${p.x} km\nFlete: R$ ${p.y}\nPedidos: ${p.count != null ? p.count : '-'}`,
+  });
+  registrarDescargas('btn-csv-flete', 'btn-jpeg-flete', canvas, d, 'dispersion_distancia_flete');
+})();
+
+// 3. Atraso vs. satisfacción
+(() => {
+  const d = DATA.stats.atraso_vs_satisfaccion;
+  const canvas = document.getElementById('chart-atraso');
+  mcBarrasVerticales(canvas, {
+    etiquetas: d.map(x => x.bucket_atraso),
+    valores: d.map(x => x.review_prom),
+    color: '#c98500',
+    formatoTooltip: (i) => `${d[i].bucket_atraso}\nReview promedio: ${d[i].review_prom}`,
+  });
+  registrarDescargas('btn-csv-atraso', 'btn-jpeg-atraso', canvas, d, 'atraso_vs_satisfaccion');
+})();
+
+// 4. Serie de tiempo de ventas
+(() => {
+  const d = DATA.stats.serie_tiempo_ventas;
+  const canvas = document.getElementById('chart-serie');
+  mcLinea(canvas, {
+    etiquetas: d.map(x => x.mes_compra),
+    valores: d.map(x => x.gmv),
+    color: '#008300',
+    colorRelleno: 'rgba(0,131,0,0.15)',
+    formatoTooltip: (i) => `${d[i].mes_compra}\nGMV: R$ ${d[i].gmv}`,
+  });
+  registrarDescargas('btn-csv-serie', 'btn-jpeg-serie', canvas, d, 'serie_tiempo_ventas');
+})();
+
+// 5. Top categorías
+(() => {
+  const d = [...DATA.stats.top_categorias].sort((a, b) => b.ticket_prom - a.ticket_prom);
+  const canvas = document.getElementById('chart-categorias');
+  mcBarrasHorizontales(canvas, {
+    etiquetas: d.map(x => x.product_category_name_english),
+    valores: d.map(x => x.ticket_prom),
+    colores: '#9085e9',
+    alturaFila: 20,
+    formatoTooltip: (i) => `${d[i].product_category_name_english}\nTicket promedio: R$ ${d[i].ticket_prom}`,
+  });
+  registrarDescargas('btn-csv-categorias', 'btn-jpeg-categorias', canvas, d, 'top_categorias');
+})();
+
+// 6. Métodos de pago
+(() => {
+  const d = DATA.stats.metodos_pago;
+  const canvas = document.getElementById('chart-pagos');
+  const colores = ['#3987e5', '#199e70', '#c98500', '#008300', '#9085e9', '#e66767'];
+  mcDona(canvas, {
+    etiquetas: d.map(x => x.payment_type),
+    valores: d.map(x => x.n_pagos),
+    colores,
+    formatoTooltip: (i) => `${d[i].payment_type}\nPagos: ${d[i].n_pagos}`,
+  });
+  registrarDescargas('btn-csv-pagos', 'btn-jpeg-pagos', canvas, d, 'metodos_pago');
+})();
+
+// 7. Top estados por GMV
+(() => {
+  const d = [...DATA.stats.top_estados_gmv].sort((a, b) => b.gmv - a.gmv);
+  const canvas = document.getElementById('chart-estados');
+  mcBarrasHorizontales(canvas, {
+    etiquetas: d.map(x => x.customer_state),
+    valores: d.map(x => x.gmv),
+    colores: '#e66767',
+    alturaFila: 20,
+    formatoTooltip: (i) => `${d[i].customer_state}\nGMV: R$ ${d[i].gmv}`,
+  });
+  registrarDescargas('btn-csv-estados', 'btn-jpeg-estados', canvas, d, 'top_estados_gmv');
+})();
+
+// 8. Matriz de correlación (mapa de calor divergente azul-rojo; polaridad -1..+1)
+(() => {
+  const columnas = DATA.stats.matriz_correlacion.columnas;
+  const matriz = DATA.stats.matriz_correlacion.datos;
+  const canvas = document.getElementById('chart-correlacion');
+  const n = columnas.length;
+  const tam = 260;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.style.width = tam + 'px';
+  canvas.style.height = tam + 'px';
+  canvas.width = Math.round(tam * dpr);
+  canvas.height = Math.round(tam * dpr);
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const celda = tam / n;
+
+  function colorDivergente(valor) {
+    const t = Math.max(-1, Math.min(1, valor));
+    const gris = [56, 56, 53];
+    const azul = [57, 135, 229];
+    const rojo = [230, 103, 103];
+    const objetivo = t >= 0 ? azul : rojo;
+    const u = Math.abs(t);
+    const r = Math.round(gris[0] + (objetivo[0] - gris[0]) * u);
+    const g = Math.round(gris[1] + (objetivo[1] - gris[1]) * u);
+    const b = Math.round(gris[2] + (objetivo[2] - gris[2]) * u);
+    return `rgb(${r},${g},${b})`;
+  }
+
+  ctx.font = '9px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      const valor = matriz[i][j];
+      ctx.fillStyle = colorDivergente(valor);
+      ctx.fillRect(j * celda, i * celda, celda - 2, celda - 2);
+      ctx.fillStyle = Math.abs(valor) > 0.55 ? '#ffffff' : '#c3c2b7';
+      ctx.fillText(valor.toFixed(2), j * celda + celda / 2, i * celda + celda / 2);
+    }
+  }
+
+  const filasCSV = columnas.map((c, i) => {
+    const fila = { variable: c };
+    columnas.forEach((c2, j) => { fila[c2] = matriz[i][j]; });
+    return fila;
+  });
+  registrarDescargas('btn-csv-correlacion', 'btn-jpeg-correlacion', canvas, filasCSV, 'matriz_correlacion');
+})();
+</script>
+</body>
+</html>

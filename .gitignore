@@ -1,0 +1,21 @@
+# Entornos virtuales
+.venv/
+venv/
+env/
+
+# Cache de Python / pytest
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Logs generados por el pipeline (se regeneran con cada corrida)
+logs/*.log
+
+# Dataset crudo de Olist (~127 MB, no conviene subirlo a git)
+# Se descarga desde Kaggle — ver README.md para el link.
+data/raw/*.csv
+
+# Sistema operativo / editor
+.DS_Store
+Thumbs.db
+.vscode/

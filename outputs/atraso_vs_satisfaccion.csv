@@ -1,0 +1,7 @@
+bucket_atraso,review_prom,n_pedidos
+<-7d (muy anticipado),4.23,75744
+-7 a -3d,4.13,9429
+-3 a 0d,4.06,4270
+0 a 3d (tarde),3.23,1852
+3 a 7d,2.09,1748
+>7d (muy tarde),1.68,2745

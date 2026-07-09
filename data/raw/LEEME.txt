@@ -1,0 +1,14 @@
+Coloca aquí las 9 tablas CSV del dataset Olist (las mismas que ya tienes en tu
+olist_raw.zip), con estos nombres exactos (coinciden con config/config.yaml):
+
+  olist_orders_dataset.csv
+  olist_customers_dataset.csv
+  olist_sellers_dataset.csv
+  olist_order_items_dataset.csv
+  olist_order_payments_dataset.csv
+  olist_order_reviews_dataset.csv
+  olist_products_dataset.csv
+  olist_geolocation_dataset.csv
+  product_category_name_translation.csv
+
+No se incluyen en este zip para no duplicar los ~120 MB que ya tienes.

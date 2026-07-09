@@ -1,0 +1,53 @@
+# config.yaml
+# Configuración externalizada del proyecto "Geografía de Ventas + Dashboard 360"
+# DPL1046 - Proyecto Integrador
+#
+# No incluir credenciales aquí. Si en Unidad 3 se agrega AWS (S3/Athena),
+# las credenciales deben venir de variables de entorno o de un profile de AWS CLI,
+# nunca de este archivo.
+
+paths:
+  raw_dir: "data/raw"
+  processed_dir: "data/processed"
+  outputs_dir: "outputs"
+  logs_dir: "logs"
+  dashboard_flujos_file: "outputs/dashboard_flujos.html"
+  dashboard_estadisticas_file: "outputs/dashboard_estadisticas.html"
+  dashboard_mapa_file: "outputs/mapa_animado.html"
+
+archivos_origen:
+  orders: "olist_orders_dataset.csv"
+  customers: "olist_customers_dataset.csv"
+  sellers: "olist_sellers_dataset.csv"
+  order_items: "olist_order_items_dataset.csv"
+  order_payments: "olist_order_payments_dataset.csv"
+  order_reviews: "olist_order_reviews_dataset.csv"
+  products: "olist_products_dataset.csv"
+  geolocation: "olist_geolocation_dataset.csv"
+  category_translation: "product_category_name_translation.csv"
+
+negocio:
+  estado_urbano_foco: "SP"          # estado sobre el que se hace el zoom urbano
+  ciudad_urbana_foco: "sao paulo"   # ciudad sobre la que se hace el zoom urbano
+  min_pedidos_por_arco: 5           # umbral mínimo de pedidos para dibujar un arco (reduce ruido visual)
+  top_n_arcos_nacional: 60          # número máximo de arcos estado-estado en el mapa nacional
+  top_n_arcos_urbano: 40            # número máximo de arcos barrio-barrio en el zoom urbano
+  scatter_aggregation_bins: 30      # celdas por dimensión para agrupar los datos de dispersión
+                                     # (antes 80 -> ~840 puntos por gráfico; con 30 baja el peso
+                                     # del HTML generado sin perder la forma de la distribución)
+
+# Pesos del índice compuesto de desempeño logístico (IDL).
+# Deben sumar 1.0. Se documentan aquí para que el criterio de negocio
+# quede explícito y auditable (no hardcodeado en el código).
+indice_desempeno:
+  peso_volumen: 0.25
+  peso_puntualidad: 0.30      # invertido: menor atraso = mejor puntualidad
+  peso_eficiencia_flete: 0.20 # invertido: menor costo de flete por km = más eficiente
+  peso_satisfaccion: 0.25
+
+logging:
+  nivel: "INFO"
+  archivo: "logs/pipeline.log"
+  formato: "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
+  rotacion_bytes: 5242880   # 5 MB
+  respaldo_copias: 3

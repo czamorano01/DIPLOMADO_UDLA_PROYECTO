@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Geografía de ventas · Dashboard 360 — Olist</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; background:#0a0e0d; color:#d5dbd8; font-family: 'Segoe UI', Roboto, Arial, sans-serif; overflow:hidden; height:100%; }
+  #escena-canvas { position:fixed; inset:0; z-index:1; }
+  #app-ui { position:fixed; inset:0; z-index:2; pointer-events:none; transition:opacity 1s; }
+  #app-ui a, #app-ui button { pointer-events:auto; }
+  header { position:absolute; top:0; left:0; right:0; padding:18px 26px; display:flex; justify-content:space-between; align-items:flex-start;
+           background:linear-gradient(180deg, rgba(6,10,9,0.85), rgba(6,10,9,0)); }
+  h1 { font-size:19px; font-weight:600; margin:0; color:#eafff2; letter-spacing:0.3px; }
+  header p { margin:4px 0 0; font-size:12.5px; color:#8fa79c; }
+  #controles-header { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  #selector-flujos { display:flex; gap:6px; align-items:center; }
+  #selector-flujos select { background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.12); color:#d5dbd8; padding:6px 8px; border-radius:8px; font-size:12px; }
+  #selector-flujos label { font-size:12px; color:#c7d2cd; display:flex; align-items:center; gap:6px; }
+  .btn { background:rgba(34,197,94,0.12); border:1px solid rgba(34,197,94,0.45); color:#7dfcae; padding:7px 12px; border-radius:7px;
+         font-size:12px; cursor:pointer; transition:background .15s; white-space:nowrap; }
+  .btn:hover { background:rgba(34,197,94,0.25); }
+  .btn-secundario { background:rgba(148,163,184,0.1); border-color:rgba(148,163,184,0.35); color:#c7d2cd; }
+  #leyenda { position:absolute; left:26px; bottom:26px; background:rgba(10,14,13,0.72); border:1px solid rgba(255,255,255,0.08);
+             border-radius:10px; padding:14px 16px; font-size:12px; min-width:230px; backdrop-filter: blur(4px); }
+  #leyenda h3 { margin:0 0 8px; font-size:12.5px; color:#eafff2; font-weight:600; }
+  .fila-leyenda { display:flex; align-items:center; gap:8px; margin:5px 0; }
+  .punto { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+  #ranking-indice { margin-top:10px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.08); }
+  #ranking-indice div { display:flex; justify-content:space-between; font-size:11.5px; margin:3px 0; color:#a9bdb4; }
+  #etiqueta-escena { position:absolute; top:100px; left:50%; transform:translateX(-50%); font-size:13px; color:#7dfcae;
+                     background:rgba(10,14,13,0.6); padding:6px 14px; border-radius:20px; border:1px solid rgba(34,197,94,0.3); }
+  #sidebar-paneles { position:absolute; right:20px; top:90px; bottom:90px; width:300px; overflow-y:auto; display:flex; flex-direction:column; gap:12px; }
+  #sidebar-paneles::-webkit-scrollbar { width:5px; }
+  #sidebar-paneles::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.15); border-radius:5px; }
+  .card-panel { background:rgba(10,14,13,0.82); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:12px;
+                opacity:0; transform:translateX(24px); transition:opacity .6s, transform .6s; flex-shrink:0; }
+  .card-panel.visible { opacity:1; transform:translateX(0); }
+  .card-panel h4 { margin:0 0 8px; font-size:12.5px; color:#eafff2; font-weight:600; }
+  .card-panel canvas { width:100% !important; max-height:150px; }
+  .card-botones { display:flex; gap:6px; margin-top:8px; }
+  .card-botones button { flex:1; font-size:10.5px; padding:5px 4px; border-radius:6px; border:1px solid rgba(255,255,255,0.15);
+                          background:rgba(255,255,255,0.04); color:#c7d2cd; cursor:pointer; }
+  .card-botones button:hover { background:rgba(255,255,255,0.1); }
+  #ruleta-contenedor { position:absolute; inset:0; display:none; align-items:center; justify-content:center; perspective:1400px; }
+  #ruleta-contenedor.activa { display:flex; }
+  #ruleta-ring { position:relative; width:280px; height:190px; transform-style:preserve-3d; animation: girar 42s linear infinite; }
+  @keyframes girar { from { transform:rotateY(0deg); } to { transform:rotateY(360deg); } }
+  .card-ruleta { position:absolute; top:0; left:0; width:280px; height:190px; background:rgba(10,14,13,0.92);
+                 border:1px solid rgba(34,197,94,0.3); border-radius:12px; padding:10px; backface-visibility:hidden; }
+  .card-ruleta h4 { margin:0 0 6px; font-size:11.5px; color:#eafff2; font-weight:600; }
+  .card-ruleta canvas { width:100% !important; max-height:100px; }
+  #pie-enter { position:absolute; bottom:22px; left:50%; transform:translateX(-50%); font-size:12px; color:#6b8378; }
+  #pie-enter b { color:#7dfcae; }
+  #matrix-canvas { position:fixed; inset:0; z-index:5; opacity:0; transition:opacity 1s; }
+  #matrix-canvas.oculto { display:none; }
+  #mensaje-final { position:fixed; inset:0; z-index:6; display:flex; align-items:center; justify-content:center;
+                   font-size:20px; color:#7dfcae; font-family:monospace; text-align:center; padding:0 40px; }
+  .oculto-clase { display:none; }
+</style>
+</head>
+<body>
+
+<canvas id="escena-canvas"></canvas>
+
+<div id="app-ui">
+  <header>
+    <div>
+      <h1>Geografía de ventas · Dashboard 360</h1>
+      <p id="meta-info"></p>
+    </div>
+    <div id="controles-header">
+      <button class="btn btn-secundario" id="btn-csv-nacional">Flujos nacionales (CSV)</button>
+      <button class="btn btn-secundario" id="btn-csv-urbano">Flujos urbanos (CSV)</button>
+      <div id="selector-flujos">
+        <label>Flujo 1:
+          <select id="select-flujo-1">
+            <option value="volumen">Volumen de pedidos</option>
+            <option value="satisfaccion">Satisfacción</option>
+          </select>
+        </label>
+        <label>Flujo 2:
+          <select id="select-flujo-2">
+            <option value="satisfaccion">Satisfacción</option>
+            <option value="volumen">Volumen de pedidos</option>
+          </select>
+        </label>
+        <button class="btn btn-secundario" id="btn-actualizar-flujos">Aplicar</button>
+      </div>
+      <button class="btn" id="btn-saltar">Saltar intro →</button>
+    </div>
+  </header>
+
+  <div id="etiqueta-escena">Cargando corrientes de pedidos…</div>
+
+  <div id="leyenda">
+    <h3>Corrientes activas</h3>
+    <div id="leyenda-flujos"></div>
+    <div class="fila-leyenda" style="margin-top:6px; color:#7f9389;">Brillo de la corriente = score de esa métrica</div>
+    <div id="ranking-indice"><b style="color:#eafff2; font-size:11.5px;">Índice de desempeño — top 5</b></div>
+  </div>
+
+  <div id="sidebar-paneles"></div>
+
+  <div id="ruleta-contenedor">
+    <div id="ruleta-ring"></div>
+  </div>
+
+  <div id="pie-enter">Presiona <b>Enter</b> en cualquier momento para finalizar la demo</div>
+</div>
+
+<canvas id="matrix-canvas" class="oculto"></canvas>
+
+<script>
+const DATA = {"meta": {"total_pedidos": 98666, "gmv_total_fmt": "R$ 15.843.553", "periodo": "2016-09 a 2018-09"}, "flujos_nacionales": [{"seller_state": "SP", "customer_state": "SP", "volumen": 31502, "gmv": 4095360.65, "atraso_prom": -10.230152456239413, "flete_por_km_prom": 0.3432500597777551, "review_prom": 4.130687668716779, "distancia_prom_km": 150.83836241795117, "score_volumen": 100.0, "score_puntualidad": 32.314899774138894, "score_flete": 91.89654930743424, "score_satisfaccion": 69.03241165799975, "indice_desempeno": 70.3, "lat_origen": -23.155308346172937, "lng_origen": -47.0840736716131, "lat_destino": -23.155308346172937, "lng_destino": -47.0840736716131}, {"seller_state": "SP", "customer_state": "RJ", "volumen": 8457, "gmv": 1304526.93, "atraso_prom": -11.122501063377285, "flete_por_km_prom": 0.05167829327538978, "review_prom": 3.727063500366147, "distancia_prom_km": 442.4438227193001, "score_volumen": 26.834301679525037, "score_puntualidad": 34.92920233411313, "score_flete": 99.02443821574317, "score_satisfaccion": 53.930215603900386, "indice_desempeno": 50.5, "lat_origen": -23.155308346172937, "lng_origen": -47.0840736716131, "lat_destino": -22.743477321669616, "lng_destino": -43.15554026830261}, {"seller_state": "SP", "customer_state": "MG", "volumen": 7591, "gmv": 1124066.42, "atraso_prom": -12.797385620915033, "flete_por_km_prom": 0.049541488609943986, "review_prom": 4.043176293552494, "distancia_prom_km": 495.30879213352415, "score_volumen": 24.084833476204082, "score_puntualidad": 39.8360906862745, "score_flete": 99.07667546236263, "score_satisfaccion": 65.75804394583943, "indice_desempeno": 54.2, "lat_origen": -23.155308346172937, "lng_origen": -47.0840736716131, "lat_destino": -19.8646472791171, "lng_destino": -44.42161506590787}, {"seller_state": "SP", "customer_state": "RS", "volumen": 3668, "gmv": 539059.45, "atraso_prom": -14.460198403097024, "flete_por_km_prom": 0.023319139021659892, "review_prom": 3.992581957406078, "distancia_prom_km": 907.2250543013259, "score_volumen": 11.629679017049241, "score_puntualidad": 44.7076125090733, "score_flete": 99.71771830756765, "score_satisfaccion": 63.86498192521629, "indice_desempeno": 52.2, "lat_origen": -23.155308346172937, "lng_origen": -47.0840736716131, "lat_destino": -29.67919062328251, "lng_destino": -52.03265163171496}, {"seller_state": "SP", "customer_state": "PR", "volumen": 3177, "gmv": 479645.49, "atraso_prom": -13.198392906622333, "flete_por_km_prom": 0.05005202381731262, "review_prom": 4.048219178082192, "distancia_prom_km": 464.08718197768025, "score_volumen": 10.070800393688287, "score_puntualidad": 41.0109167186201, "score_flete": 99.0641946989281, "score_satisfaccion": 65.94673093937824, "indice_desempeno": 51.1, "lat_origen": -23.155308346172937, "lng_origen": -47.0840736716131, "lat_destino": -24.793606676623277, "lng_destino": -50.8796624431511}, {"seller_state": "PR", "customer_state": "SP", "volumen": 3019, "gmv": 534140.85, "atraso_prom": -15.274850299401198, "flete_por_km_prom": 0.04560128617008969, "review_prom": 4.142857142857143, "distancia_prom_km": 470.3331463887537, "score_volumen": 9.56916531733181, "score_puntualidad": 47.094287986526936, "score_flete": 99.17299934723131, "score_satisfaccion": 69.48775055679289, "indice_desempeno": 53.7, "lat_origen": -24.793606676623277, "lng_origen": -50.8796624431511, "lat_destino": -23.155308346172937, "lng_destino": -47.0840736716131}, {"seller_state": "MG", "customer_state": "SP", "volumen": 2633, "gmv": 385876.91, "atraso_prom": -13.631724137931034, "flete_por_km_prom": 0.06370472250305081, "review_prom": 4.122199592668024, "distancia_prom_km": 417.6283913543049, "score_volumen": 8.343651776359653, "score_puntualidad": 42.28044181034482, "score_flete": 98.73043495017764, "score_satisfaccion": 68.71481772120893, "indice_desempeno": 51.7, "lat_origen": -19.8646472791171, "lng_origen": -44.42161506590787, "lat_destino": -23.155308346172937, "lng_destino": -47.0840736716131}, {"seller_state": "SP", "customer_state": "BA", "volumen": 2387, "gmv": 387627.01, "atraso_prom": -10.933358720487433, "flete_por_km_prom": 0.01767696738754292, "review_prom": 3.7591623036649215, "distancia_prom_km": 1392.7366867989667, "score_volumen": 7.562625011905896, "score_puntualidad": 34.37507437642802, "score_flete": 99.8556492639563, "score_satisfaccion": 55.1312398698679, "indice_desempeno": 46.0, "lat_origen": -23.155308346172937, "lng_origen": -47.0840736716131, "lat_destino": -13.049360869325652, "lng_destino": -39.560648696030576}, {"seller_state": "SP", "customer_state": "SC", "volumen": 2370, "gmv": 367112.13, "atraso_prom": -11.035068290882244, "flete_por_km_prom": 0.04024168290465741, "review_prom": 3.9044468945240722, "distancia_prom_km": 565.0850239794261, "score_volumen": 7.508651617614376, "score_puntualidad": 34.67305163344406, "score_flete": 99.30402251565012, "score_satisfaccion": 60.56727801337287, "indice_desempeno": 47.3, "lat_origen": -23.155308346172937, "lng_origen": -47.0840736716131, "lat_destino": -27.222485826583537, "lng_destino": -49.6179368726889}, {"seller_state": "MG", "customer_state": "MG", "volumen": 1572, "gmv": 214839.24, "atraso_prom": -12.602756141402038, "flete_por_km_prom": 0.3398086299127977, "review_prom": 4.249265138154027, "distancia_prom_km": 259.96534434779574, "score_volumen": 4.975076991459504, "score_puntualidad": 39.26588713301378, "score_flete": 91.9806799832449, "score_satisfaccion": 73.46916329841349, "indice_desempeno": 49.8, "lat_origen": -19.8646472791171, "lng_origen": -44.42161506590787, "lat_destino": -19.8646472791171, "lng_destino": -44.42161506590787}, {"seller_state": "SP", "customer_state": "ES", "volumen": 1492, "gmv": 224036.06, "atraso_prom": -9.600246761258482, "flete_por_km_prom": 0.02663588084358652, "review_prom": 3.94960049170252, "distancia_prom_km": 788.0588788431529, "score_volumen": 4.721084547734705, "score_puntualidad": 30.469472933374448, "score_flete": 99.63663580932774, "score_satisfaccion": 62.256766727399416, "indice_desempeno": 45.8, "lat_origen": -23.155308346172937, "lng_origen": -47.0840736716131, "lat_destino": -20.105145324187276, "lng_destino": -40.50318322322485}, {"seller_state": "SP", "customer_state": "GO", "volumen": 1463, "gmv": 230971.74, "atraso_prom": -11.63669281834641, "flete_por_km_prom": 0.029634578689347345, "review_prom": 3.946075494307969, "distancia_prom_km": 744.7614764730605, "score_volumen": 4.629012286884465, "score_puntualidad": 36.435623491249245, "score_flete": 99.5633283510283, "score_satisfaccion": 62.124873729117766, "indice_desempeno": 47.5, "lat_origen": -23.155308346172937, "lng_origen": -47.0840736716131, "lat_destino": -16.577644584237593, "lng_destino": -49.33419502806323}, {"seller_state": "SP", "customer_state": "DF", "volumen": 1415, "gmv": 211208.66, "atraso_prom": -11.761022364217252, "flete_por_km_prom": 0.02537503729968191, "review_prom": 3.9552614996849402, "distancia_prom_km": 805.4695126362859, "score_volumen": 4.4766168206495855, "score_puntualidad": 36.79987020766773, "score_flete": 99.66745893332057, "score_satisfaccion": 62.46858172540535, "indice_desempeno": 47.7, "lat_origen": -23.155308346172937, "lng_origen": -47.0840736716131, "lat_destino": -15.810884759001096, "lng_destino": -47.96963045270266}, {"seller_state": "RJ", "customer_state": "SP", "volumen": 1381, "gmv": 299412.25, "atraso_prom": -11.798233695652174, "flete_por_km_prom": 0.05063121553590336, "review_prom": 4.028495692511597, "distancia_prom_km": 401.697640690369, "score_volumen": 4.368670032066547, "score_puntualidad": 36.90888778023097, "score_flete": 99.05003552886767, "score_satisfaccion": 65.20874751491054, "indice_desempeno": 48.3, "lat_origen": -22.743477321669616, "lng_origen": -43.15554026830261, "lat_destino": -23.155308346172937, "lng_destino": -47.0840736716131}, {"seller_state": "SC", "customer_state": "SP", "volumen": 1348, "gmv": 237477.04, "atraso_prom": -14.796234028244788, "flete_por_km_prom": 0.04459678931658143, "review_prom": 4.115922718187875, "distancia_prom_km": 512.2637855301132, "score_volumen": 4.263898149030066, "score_puntualidad": 45.6920918796234, "score_flete": 99.19755570968863, "score_satisfaccion": 68.47995916604967, "indice_desempeno": 51.7, "lat_origen": -27.222485826583537, "lng_origen": -49.6179368726889, "lat_destino": -23.155308346172937, "lng_destino": -47.0840736716131}, {"seller_state": "MG", "customer_state": "RJ", "volumen": 1196, "gmv": 187923.5, "atraso_prom": -13.386666666666667, "flete_por_km_prom": 0.07695451514599921, "review_prom": 3.9771863117870723, "distancia_prom_km": 373.4856762944042, "score_volumen": 3.781312505952948, "score_puntualidad": 41.56249999999999, "score_flete": 98.40652481597644, "score_satisfaccion": 63.28893104236708, "indice_desempeno": 48.9, "lat_origen": -19.8646472791171, "lng_origen": -44.42161506590787, "lat_destino": -22.743477321669616, "lng_destino": -43.15554026830261}, {"seller_state": "SP", "customer_state": "PE", "volumen": 1172, "gmv": 202337.49, "atraso_prom": -13.786516853932584, "flete_por_km_prom": 0.015276472498768597, "review_prom": 3.910236220472441, "distancia_prom_km": 2049.5621026393587, "score_volumen": 3.7051147728355085, "score_puntualidad": 42.73393609550561, "score_flete": 99.91433279527828, "score_satisfaccion": 60.783894218122526, "indice_desempeno": 48.9, "lat_origen": -23.155308346172937, "lng_origen": -47.0840736716131, "lat_destino": -8.179098403904215, "lng_destino": -35.75886555563954}, {"seller_state": "SP", "customer_state": "CE", "volumen": 1009, "gmv": 190590.46, "atraso_prom": -11.175985334555454, "flete_por_km_prom": 0.01385030777113433, "review_prom": 3.815836298932384, "distancia_prom_km": 2258.206033632349, "score_volumen": 3.18760516874623, "score_puntualidad": 35.08589453483043, "score_flete": 99.94919743208955, "score_satisfaccion": 57.25178134089991, "indice_desempeno": 45.6, "lat_origen": -23.155308346172937, "lng_origen": -47.0840736716131, "lat_destino": -4.36315122962809, "lng_destino": -39.00413976333794}, {"seller_state": "PR", "customer_state": "RJ", "volumen": 1007, "gmv": 175270.88, "atraso_prom": -13.671748878923767, "flete_por_km_prom": 0.02756824208245387, "review_prom": 3.753315649867374, "distancia_prom_km": 839.5554546986705, "score_volumen": 3.18125535765311, "score_puntualidad": 42.397701793721964, "score_flete": 99.61384290515605, "score_satisfaccion": 54.912478658734706, "indice_desempeno": 47.2, "lat_origen": -24.793606676623277, "lng_origen": -50.8796624431511, "lat_destino": -22.743477321669616, "lng_destino": -43.15554026830261}, {"seller_state": "RJ", "customer_state": "RJ", "volumen": 998, "gmv": 202509.68, "atraso_prom": -13.239410681399631, "flete_por_km_prom": 0.6267586507254436, "review_prom": 4.21028880866426, "distancia_prom_km": 54.23342009942144, "score_volumen": 3.15268120773407, "score_puntualidad": 41.13108598066299, "score_flete": 84.96577625945487, "score_satisfaccion": 72.01080620391888, "indice_desempeno": 48.1, "lat_origen": -22.743477321669616, "lng_origen": -43.15554026830261, "lat_destino": -22.743477321669616, "lng_destino": -43.15554026830261}, {"seller_state": "PR", "customer_state": "MG", "volumen": 839, "gmv": 161684.78, "atraso_prom": -15.389189189189189, "flete_por_km_prom": 0.02792126415242304, "review_prom": 4.142550911039657, "distancia_prom_km": 883.9586372885572, "score_volumen": 2.6478712258310315, "score_puntualidad": 47.429265202702695, "score_flete": 99.60521277567847, "score_satisfaccion": 69.4762924397912, "indice_desempeno": 52.2, "lat_origen": -24.793606676623277, "lng_origen": -50.8796624431511, "lat_destino": -19.8646472791171, "lng_destino": -44.42161506590787}, {"seller_state": "PR", "customer_state": "PR", "volumen": 734, "gmv": 119923.37, "atraso_prom": -12.460869565217392, "flete_por_km_prom": 0.5736049976323299, "review_prom": 4.272838002436053, "distancia_prom_km": 219.7465580173736, "score_volumen": 2.3145061434422325, "score_puntualidad": 38.85020380434783, "score_flete": 86.26519334247149, "score_satisfaccion": 74.35117692856504, "indice_desempeno": 48.1, "lat_origen": -24.793606676623277, "lng_origen": -50.8796624431511, "lat_destino": -24.793606676623277, "lng_destino": -50.8796624431511}, {"seller_state": "SP", "customer_state": "PA", "volumen": 701, "gmv": 141459.92, "atraso_prom": -14.269281045751635, "flete_por_km_prom": 0.014146065163466464, "review_prom": 3.739018087855297, "distancia_prom_km": 2325.594809711668, "score_volumen": 2.209734260405753, "score_puntualidad": 44.14828431372548, "score_flete": 99.94196721957054, "score_satisfaccion": 54.377514200376375, "indice_desempeno": 47.4, "lat_origen": -23.155308346172937, "lng_origen": -47.0840736716131, "lat_destino": -2.6312130665342277, "lng_destino": -49.4858616770825}, {"seller_state": "RS", "customer_state": "SP", "volumen": 684, "gmv": 135420.26, "atraso_prom": -18.64485981308411, "flete_por_km_prom": 0.02803285954821974, "review_prom": 4.203947368421052, "distancia_prom_km": 862.2235313863237, "score_volumen": 2.155760866114233, "score_puntualidad": 56.96736273364485, "score_flete": 99.60248466659762, "score_satisfaccion": 71.77353182510842, "indice_desempeno": 55.5, "lat_origen": -29.67919062328251, "lng_origen": -52.03265163171496, "lat_destino": -23.155308346172937, "lng_destino": -47.0840736716131}, {"seller_state": "SP", "customer_state": "MT", "volumen": 663, "gmv": 118356.82, "atraso_prom": -14.646517739816032, "flete_por_km_prom": 0.019496789800410183, "review_prom": 4.007863695937091, "distancia_prom_km": 1343.502810476779, "score_volumen": 2.0890878496364733, "score_puntualidad": 45.25346994086728, "score_flete": 99.81116110192548, "score_satisfaccion": 64.43677080566398, "indice_desempeno": 50.2, "lat_origen": -23.155308346172937, "lng_origen": -47.0840736716131, "lat_destino": -14.156481652355609, "lng_destino": -55.708955824019334}, {"seller_state": "PR", "customer_state": "RS", "volumen": 596, "gmv": 101800.27, "atraso_prom": -13.683211678832118, "flete_por_km_prom": 0.03580394699370221, "review_prom": 4.132183908045977, "distancia_prom_km": 632.4860990356223, "score_volumen": 1.876369178016954, "score_puntualidad": 42.43128421532846, "score_flete": 99.41250931791205, "score_satisfaccion": 69.08839566853544, "indice_desempeno": 50.4, "lat_origen": -24.793606676623277, "lng_origen": -50.8796624431511, "lat_destino": -29.67919062328251, "lng_destino": -52.03265163171496}, {"seller_state": "RJ", "customer_state": "MG", "volumen": 567, "gmv": 119401.13, "atraso_prom": -13.117647058823529, "flete_por_km_prom": 0.058229749566825424, "review_prom": 4.167213114754098, "distancia_prom_km": 378.0793314456737, "score_volumen": 1.7842969171667142, "score_puntualidad": 40.774356617647044, "score_flete": 98.86427849522849, "score_satisfaccion": 70.39906531819344, "indice_desempeno": 50.1, "lat_origen": -22.743477321669616, "lng_origen": -43.15554026830261, "lat_destino": -19.8646472791171, "lng_destino": -44.42161506590787}, {"seller_state": "SP", "customer_state": "MA", "volumen": 509, "gmv": 90954.52, "atraso_prom": -9.551912568306012, "flete_por_km_prom": 0.017852288497258072, "review_prom": 3.606060606060606, "distancia_prom_km": 2181.04962964387, "score_volumen": 1.600152395466235, "score_puntualidad": 30.327868852459005, "score_flete": 99.85136328864284, "score_satisfaccion": 49.40271309981778, "indice_desempeno": 41.8, "lat_origen": -23.155308346172937, "lng_origen": -47.0840736716131, "lat_destino": -3.7989966701671265, "lng_destino": -44.81862689333526}, {"seller_state": "SP", "customer_state": "MS", "volumen": 484, "gmv": 85971.64, "atraso_prom": -10.392792792792793, "flete_por_km_prom": 0.028594824478035977, "review_prom": 3.9679144385026737, "distancia_prom_km": 809.4091167862339, "score_volumen": 1.5207797568022352, "score_puntualidad": 32.79138513513513, "score_flete": 99.58874663003068, "score_satisfaccion": 62.94201017114682, "indice_desempeno": 45.9, "lat_origen": -23.155308346172937, "lng_origen": -47.0840736716131, "lat_destino": -20.765005763284858, "lng_destino": -54.53214031549422}, {"seller_state": "SC", "customer_state": "RJ", "volumen": 483, "gmv": 93678.67, "atraso_prom": -13.736346516007533, "flete_por_km_prom": 0.03262899580209979, "review_prom": 3.909090909090909, "distancia_prom_km": 785.0731288965591, "score_volumen": 1.5176048512556752, "score_puntualidad": 42.586952683615806, "score_flete": 99.49012554137057, "score_satisfaccion": 60.741040696497286, "indice_desempeno": 48.2, "lat_origen": -27.222485826583537, "lng_origen": -49.6179368726889, "lat_destino": -22.743477321669616, "lng_destino": -43.15554026830261}, {"seller_state": "SC", "customer_state": "MG", "volumen": 441, "gmv": 94499.13, "atraso_prom": -16.014705882352942, "flete_por_km_prom": 0.030930348605125203, "review_prom": 4.010438413361169, "distancia_prom_km": 950.0759275512703, "score_volumen": 1.3842588183001556, "score_puntualidad": 49.26183363970588, "score_flete": 99.53165140191491, "score_satisfaccion": 64.53310767142014, "indice_desempeno": 51.2, "lat_origen": -27.222485826583537, "lng_origen": -49.6179368726889, "lat_destino": -19.8646472791171, "lng_destino": -44.42161506590787}, {"seller_state": "PR", "customer_state": "SC", "volumen": 399, "gmv": 69620.03, "atraso_prom": -12.279909706546276, "flete_por_km_prom": 0.06764852722767585, "review_prom": 4.235555555555556, "distancia_prom_km": 392.7852316003543, "score_volumen": 1.250912785344636, "score_puntualidad": 38.32004796839728, "score_flete": 98.6340230023049, "score_satisfaccion": 72.95619896065332, "indice_desempeno": 49.8, "lat_origen": -24.793606676623277, "lng_origen": -50.8796624431511, "lat_destino": -27.222485826583537, "lng_destino": -49.6179368726889}, {"seller_state": "MG", "customer_state": "BA", "volumen": 379, "gmv": 57364.26, "atraso_prom": -11.087167070217918, "flete_por_km_prom": 0.025508353258213136, "review_prom": 3.9786729857819907, "distancia_prom_km": 1048.7550030981715, "score_volumen": 1.1874146744134362, "score_puntualidad": 34.825684776029036, "score_flete": 99.66419983401369, "score_satisfaccion": 63.344557151753776, "indice_desempeno": 46.5, "lat_origen": -19.8646472791171, "lng_origen": -44.42161506590787, "lat_destino": -13.049360869325652, "lng_destino": -39.560648696030576}, {"seller_state": "MG", "customer_state": "PR", "volumen": 370, "gmv": 58130.2, "atraso_prom": -16.364077669902912, "flete_por_km_prom": 0.0335952795750094, "review_prom": 4.234866828087167, "distancia_prom_km": 805.6465413819906, "score_volumen": 1.1588405244943962, "score_puntualidad": 50.285383798543684, "score_flete": 99.46650335233004, "score_satisfaccion": 72.93042920237063, "indice_desempeno": 53.5, "lat_origen": -19.8646472791171, "lng_origen": -44.42161506590787, "lat_destino": -24.793606676623277, "lng_destino": -50.8796624431511}, {"seller_state": "SP", "customer_state": "PB", "volumen": 349, "gmv": 85105.37, "atraso_prom": -12.886304909560723, "flete_por_km_prom": 0.019769663232227595, "review_prom": 3.9848101265822784, "distancia_prom_km": 2167.9024576463403, "score_volumen": 1.0921675080166366, "score_puntualidad": 40.096596414728666, "score_flete": 99.8044903205554, "score_satisfaccion": 63.574187364325795, "indice_desempeno": 48.2, "lat_origen": -23.155308346172937, "lng_origen": -47.0840736716131, "lat_destino": -7.08829790924903, "lng_destino": -35.82167825839298}, {"seller_state": "SP", "customer_state": "PI", "volumen": 343, "gmv": 65656.0, "atraso_prom": -10.651933701657459, "flete_por_km_prom": 0.019127836629145294, "review_prom": 3.839572192513369, "distancia_prom_km": 2013.5717802289919, "score_volumen": 1.0731180747372766, "score_puntualidad": 33.55058701657457, "score_flete": 99.82018068996273, "score_satisfaccion": 58.13989495372962, "indice_desempeno": 44.8, "lat_origen": -23.155308346172937, "lng_origen": -47.0840736716131, "lat_destino": -5.754988726061569, "lng_destino": -42.50954149377485}, {"seller_state": "SP", "customer_state": "RN", "volumen": 341, "gmv": 69617.93000000001, "atraso_prom": -13.103260869565217, "flete_por_km_prom": 0.01648230838139739, "review_prom": 4.024193548387097, "distancia_prom_km": 2260.5083274391545, "score_volumen": 1.0667682636441567, "score_puntualidad": 40.732209578804344, "score_flete": 99.88485441225055, "score_satisfaccion": 65.0477764207199, "indice_desempeno": 48.7, "lat_origen": -23.155308346172937, "lng_origen": -47.0840736716131, "lat_destino": -5.856702064225209, "lng_destino": -35.99007862513833}, {"seller_state": "DF", "customer_state": "SP", "volumen": 315, "gmv": 43060.89, "atraso_prom": -13.267477203647417, "flete_por_km_prom": 0.024295517696692873, "review_prom": 4.074404761904762, "distancia_prom_km": 821.4135117372552, "score_volumen": 0.9842207194335968, "score_puntualidad": 41.213312120060785, "score_flete": 99.69384933420456, "score_satisfaccion": 66.92650334075725, "indice_desempeno": 49.3, "lat_origen": -15.810884759001096, "lng_origen": -47.96963045270266, "lat_destino": -23.155308346172937, "lng_destino": -47.0840736716131}, {"seller_state": "SC", "customer_state": "RS", "volumen": 301, "gmv": 57045.45, "atraso_prom": -12.5527950310559, "flete_por_km_prom": 0.06132287312942477, "review_prom": 4.146341463414634, "distancia_prom_km": 424.2848266736541, "score_volumen": 0.939772041781757, "score_puntualidad": 39.119516692546576, "score_flete": 98.78866266521052, "score_satisfaccion": 69.61812157097074, "indice_desempeno": 49.1, "lat_origen": -27.222485826583537, "lng_origen": -49.6179368726889, "lat_destino": -29.67919062328251, "lng_destino": -52.03265163171496}, {"seller_state": "RS", "customer_state": "RS", "volumen": 295, "gmv": 62140.25, "atraso_prom": -11.348909657320872, "flete_por_km_prom": 0.6640587000165107, "review_prom": 4.447852760736196, "distancia_prom_km": 147.9603180210747, "score_volumen": 0.9207226085023971, "score_puntualidad": 35.59250876168224, "score_flete": 84.0539231990214, "score_satisfaccion": 80.89961331930535, "indice_desempeno": 47.9, "lat_origen": -29.67919062328251, "lng_origen": -52.03265163171496, "lat_destino": -29.67919062328251, "lng_destino": -52.03265163171496}, {"seller_state": "SC", "customer_state": "PR", "volumen": 288, "gmv": 50751.13, "atraso_prom": -14.560371517027864, "flete_por_km_prom": 0.08196063915972544, "review_prom": 4.337461300309598, "distancia_prom_km": 354.0929041846444, "score_volumen": 0.8984982696764772, "score_puntualidad": 45.001088428792556, "score_flete": 98.28414295349673, "score_satisfaccion": 76.7691533300696, "indice_desempeno": 52.6, "lat_origen": -27.222485826583537, "lng_origen": -49.6179368726889, "lat_destino": -24.793606676623277, "lng_destino": -50.8796624431511}, {"seller_state": "MG", "customer_state": "RS", "volumen": 285, "gmv": 46377.37, "atraso_prom": -17.177419354838708, "flete_por_km_prom": 0.026811588844946874, "review_prom": 4.111464968152866, "distancia_prom_km": 1252.9232750029141, "score_volumen": 0.8889735530367971, "score_puntualidad": 52.66822076612902, "score_flete": 99.63234037589459, "score_satisfaccion": 68.31316584625424, "indice_desempeno": 53.0, "lat_origen": -19.8646472791171, "lng_origen": -44.42161506590787, "lat_destino": -29.67919062328251, "lng_destino": -52.03265163171496}, {"seller_state": "SC", "customer_state": "SC", "volumen": 266, "gmv": 53424.25, "atraso_prom": -11.181208053691275, "flete_por_km_prom": 0.33307525906892677, "review_prom": 4.248387096774193, "distancia_prom_km": 139.814307543498, "score_volumen": 0.8286503476521573, "score_puntualidad": 35.101195469798654, "score_flete": 92.14528686521189, "score_satisfaccion": 73.4363100797471, "indice_desempeno": 47.5, "lat_origen": -27.222485826583537, "lng_origen": -49.6179368726889, "lat_destino": -27.222485826583537, "lng_destino": -49.6179368726889}, {"seller_state": "SP", "customer_state": "AL", "volumen": 266, "gmv": 52641.35, "atraso_prom": -8.241758241758241, "flete_por_km_prom": 0.018164132076351123, "review_prom": 3.5950704225352115, "distancia_prom_km": 1904.6240896275158, "score_volumen": 0.8286503476521573, "score_puntualidad": 26.48952609890108, "score_flete": 99.84373982627812, "score_satisfaccion": 48.991499105994556, "indice_desempeno": 40.4, "lat_origen": -23.155308346172937, "lng_origen": -47.0840736716131, "lat_destino": -9.599728966379828, "lng_destino": -36.05201677757483}, {"seller_state": "MG", "customer_state": "SC", "volumen": 259, "gmv": 44061.36, "atraso_prom": -13.414893617021276, "flete_por_km_prom": 0.03309576161280155, "review_prom": 3.9859649122807017, "distancia_prom_km": 908.2147842324518, "score_volumen": 0.8064260088262375, "score_puntualidad": 41.645196143617014, "score_flete": 99.4787147834471, "score_satisfaccion": 63.61739538154965, "indice_desempeno": 48.5, "lat_origen": -19.8646472791171, "lng_origen": -44.42161506590787, "lat_destino": -27.222485826583537, "lng_destino": -49.6179368726889}, {"seller_state": "RS", "customer_state": "RJ", "volumen": 249, "gmv": 57616.17, "atraso_prom": -14.946768060836503, "flete_por_km_prom": 0.025431717504825826, "review_prom": 3.9884615384615385, "distancia_prom_km": 1120.0817552995677, "score_volumen": 0.7746769533606375, "score_puntualidad": 46.13310955323195, "score_flete": 99.66607330462816, "score_satisfaccion": 63.71081034778141, "indice_desempeno": 49.9, "lat_origen": -29.67919062328251, "lng_origen": -52.03265163171496, "lat_destino": -22.743477321669616, "lng_destino": -43.15554026830261}, {"seller_state": "SP", "customer_state": "SE", "volumen": 212, "gmv": 43006.0, "atraso_prom": -9.375527426160337, "flete_por_km_prom": 0.02206017649153718, "review_prom": 3.7510373443983402, "distancia_prom_km": 1725.753594952276, "score_volumen": 0.6572054481379178, "score_puntualidad": 29.811115506329116, "score_flete": 99.74849544748791, "score_satisfaccion": 54.82723248528312, "indice_desempeno": 42.8, "lat_origen": -23.155308346172937, "lng_origen": -47.0840736716131, "lat_destino": -10.866199407643286, "lng_destino": -37.18116903794639}, {"seller_state": "RJ", "customer_state": "RS", "volumen": 208, "gmv": 41693.96, "atraso_prom": -11.493150684931507, "flete_por_km_prom": 0.018447775130827668, "review_prom": 4.119469026548672, "distancia_prom_km": 1189.8022197064106, "score_volumen": 0.6445058259516779, "score_puntualidad": 36.01508989726027, "score_flete": 99.83680576607684, "score_satisfaccion": 68.61264954569643, "indice_desempeno": 48.1, "lat_origen": -22.743477321669616, "lng_origen": -43.15554026830261, "lat_destino": -29.67919062328251, "lng_destino": -52.03265163171496}, {"seller_state": "RJ", "customer_state": "PR", "volumen": 207, "gmv": 45661.39, "atraso_prom": -13.852813852813853, "flete_por_km_prom": 0.024474989635011452, "review_prom": 3.8583690987124464, "distancia_prom_km": 819.1813503557645, "score_volumen": 0.641330920405118, "score_puntualidad": 42.92816558441558, "score_flete": 99.68946188594838, "score_satisfaccion": 58.84320903868397, "indice_desempeno": 47.7, "lat_origen": -22.743477321669616, "lng_origen": -43.15554026830261, "lat_destino": -24.793606676623277, "lng_destino": -50.8796624431511}, {"seller_state": "SP", "customer_state": "TO", "volumen": 201, "gmv": 44647.74, "atraso_prom": -11.730088495575222, "flete_por_km_prom": 0.02582380463771237, "review_prom": 4.078947368421052, "distancia_prom_km": 1479.8845195534298, "score_volumen": 0.622281487125758, "score_puntualidad": 36.70924363938053, "score_flete": 99.6564881738073, "score_satisfaccion": 67.09647169147813, "indice_desempeno": 47.9, "lat_origen": -23.155308346172937, "lng_origen": -47.0840736716131, "lat_destino": -9.503700370876633, "lng_destino": -48.348661062026544}, {"seller_state": "MG", "customer_state": "DF", "volumen": 193, "gmv": 37045.07, "atraso_prom": -13.11574074074074, "flete_por_km_prom": 0.03966077044782945, "review_prom": 4.1336405529953915, "distancia_prom_km": 592.2253592598379, "score_volumen": 0.5968822427532782, "score_puntualidad": 40.768771701388886, "score_flete": 99.31822375161818, "score_satisfaccion": 69.14289819670954, "indice_desempeno": 49.5, "lat_origen": -19.8646472791171, "lng_origen": -44.42161506590787, "lat_destino": -15.810884759001096, "lng_destino": -47.96963045270266}, {"seller_state": "RS", "customer_state": "MG", "volumen": 190, "gmv": 49771.54, "atraso_prom": -19.65437788018433, "flete_por_km_prom": 0.023101347056511172, "review_prom": 4.319444444444445, "distancia_prom_km": 1291.8146409596284, "score_volumen": 0.5873575261135981, "score_puntualidad": 59.92493519585253, "score_flete": 99.72304254369423, "score_satisfaccion": 76.09502598366743, "indice_desempeno": 57.1, "lat_origen": -29.67919062328251, "lng_origen": -52.03265163171496, "lat_destino": -19.8646472791171, "lng_destino": -44.42161506590787}, {"seller_state": "MG", "customer_state": "ES", "volumen": 180, "gmv": 26780.44, "atraso_prom": -12.800995024875622, "flete_por_km_prom": 0.05307751327286445, "review_prom": 4.0, "distancia_prom_km": 512.9891938361633, "score_volumen": 0.5556084706479982, "score_puntualidad": 39.8466651119403, "score_flete": 98.99023228140351, "score_satisfaccion": 64.14253897550111, "indice_desempeno": 47.9, "lat_origen": -19.8646472791171, "lng_origen": -44.42161506590787, "lat_destino": -20.105145324187276, "lng_destino": -40.50318322322485}, {"seller_state": "SP", "customer_state": "RO", "volumen": 172, "gmv": 34745.74, "atraso_prom": -19.964102564102564, "flete_por_km_prom": 0.01883612369169916, "review_prom": 4.03030303030303, "distancia_prom_km": 2197.1663264846347, "score_volumen": 0.5302092262755183, "score_puntualidad": 60.832331730769226, "score_flete": 99.8273120299967, "score_satisfaccion": 65.27637173516906, "indice_desempeno": 54.7, "lat_origen": -23.155308346172937, "lng_origen": -47.0840736716131, "lat_destino": -10.341289125647073, "lng_destino": -62.720578548602134}, {"seller_state": "MG", "customer_state": "GO", "volumen": 155, "gmv": 24393.07, "atraso_prom": -13.165680473372781, "flete_por_km_prom": 0.04977014958548029, "review_prom": 3.947674418604651, "distancia_prom_km": 637.6954923739935, "score_volumen": 0.4762358319839985, "score_puntualidad": 40.91507951183431, "score_flete": 99.07108551772966, "score_satisfaccion": 62.18469984979541, "indice_desempeno": 47.8, "lat_origen": -19.8646472791171, "lng_origen": -44.42161506590787, "lat_destino": -16.577644584237593, "lng_destino": -49.33419502806323}, {"seller_state": "PR", "customer_state": "DF", "volumen": 153, "gmv": 32763.260000000002, "atraso_prom": -14.545454545454545, "flete_por_km_prom": 0.02712933868048511, "review_prom": 4.01685393258427, "distancia_prom_km": 1038.4122518094828, "score_volumen": 0.4698860208908785, "score_puntualidad": 44.95738636363637, "score_flete": 99.62457252664252, "score_satisfaccion": 64.77315382497936, "indice_desempeno": 49.7, "lat_origen": -24.793606676623277, "lng_origen": -50.8796624431511, "lat_destino": -15.810884759001096, "lng_destino": -47.96963045270266}, {"seller_state": "PR", "customer_state": "BA", "volumen": 148, "gmv": 42536.53, "atraso_prom": -10.300613496932515, "flete_por_km_prom": 0.025854096055424422, "review_prom": 3.709090909090909, "distancia_prom_km": 1755.0717194030904, "score_volumen": 0.45401149315807854, "score_puntualidad": 32.52132860429447, "score_flete": 99.65574765677124, "score_satisfaccion": 53.25774448268881, "indice_desempeno": 43.1, "lat_origen": -24.793606676623277, "lng_origen": -50.8796624431511, "lat_destino": -13.049360869325652, "lng_destino": -39.560648696030576}, {"seller_state": "RS", "customer_state": "PR", "volumen": 142, "gmv": 21981.07, "atraso_prom": -13.574324324324325, "flete_por_km_prom": 0.03677007928588966, "review_prom": 4.263513513513513, "distancia_prom_km": 595.4061971076459, "score_volumen": 0.4349620598787186, "score_puntualidad": 42.112278293918905, "score_flete": 99.38889083203445, "score_satisfaccion": 74.0022873653163, "indice_desempeno": 51.1, "lat_origen": -29.67919062328251, "lng_origen": -52.03265163171496, "lat_destino": -24.793606676623277, "lng_destino": -50.8796624431511}, {"seller_state": "BA", "customer_state": "SP", "volumen": 141, "gmv": 78912.66, "atraso_prom": -12.92, "flete_por_km_prom": 0.02478935871504827, "review_prom": 4.124183006535947, "distancia_prom_km": 1408.788196372438, "score_volumen": 0.43178715433215864, "score_puntualidad": 40.1953125, "score_flete": 99.6817766841005, "score_satisfaccion": 68.78903008865015, "indice_desempeno": 49.3, "lat_origen": -13.049360869325652, "lng_origen": -39.560648696030576, "lat_destino": -23.155308346172937, "lng_destino": -47.0840736716131}, {"seller_state": "RJ", "customer_state": "BA", "volumen": 138, "gmv": 33857.79, "atraso_prom": -10.845070422535212, "flete_por_km_prom": 0.02549612524324041, "review_prom": 4.028169014084507, "distancia_prom_km": 1177.7357180297508, "score_volumen": 0.4222624376924787, "score_puntualidad": 34.11641725352112, "score_flete": 99.66449876533115, "score_satisfaccion": 65.19652435772767, "indice_desempeno": 46.6, "lat_origen": -22.743477321669616, "lng_origen": -43.15554026830261, "lat_destino": -13.049360869325652, "lng_destino": -39.560648696030576}], "flujos_urbanos": [{"seller_city": "sao paulo", "customer_city": "sao paulo", "volumen": 4173, "gmv": 455157.81, "atraso_prom": -9.038510911424904, "flete_por_km_prom": 1.093070153398, "review_prom": 4.175726927939317, "distancia_prom_km": 15.310502987128874, "score_volumen": 100.0, "score_puntualidad": 66.44121631563726, "score_flete": 92.29036870326779, "score_satisfaccion": 79.39317319848294, "indice_desempeno": 83.2, "lat_origen": -23.570860168123772, "lng_origen": -46.63324168698217, "lat_destino": -23.570860168123772, "lng_destino": -46.63324168698217}, {"seller_city": "ibitinga", "customer_city": "sao paulo", "volumen": 1111, "gmv": 122764.82, "atraso_prom": -11.410741301059002, "flete_por_km_prom": 0.04735809890993999, "review_prom": 3.86404833836858, "distancia_prom_km": 303.3566546403119, "score_volumen": 26.588348117957324, "score_puntualidad": 68.78531749116502, "score_flete": 99.78071894141458, "score_satisfaccion": 71.6012084592145, "indice_desempeno": 65.1, "lat_origen": -21.75732063771276, "lng_origen": -48.82974353343716, "lat_destino": -23.570860168123772, "lng_destino": -46.63324168698217}, {"seller_city": "santo andre", "customer_city": "sao paulo", "volumen": 437, "gmv": 45990.56, "atraso_prom": -10.039832285115304, "flete_por_km_prom": 0.6731987740366226, "review_prom": 4.31404958677686, "distancia_prom_km": 18.0908694455374, "score_volumen": 10.42915368017262, "score_puntualidad": 67.43066431335504, "score_flete": 95.29787318109479, "score_satisfaccion": 82.85123966942149, "indice_desempeno": 62.6, "lat_origen": -23.66003109137579, "lng_origen": -46.52196585166827, "lat_destino": -23.570860168123772, "lng_destino": -46.63324168698217}, {"seller_city": "sao paulo", "customer_city": "campinas", "volumen": 369, "gmv": 42365.74, "atraso_prom": -7.779411764705882, "flete_por_km_prom": 0.12292084581912995, "review_prom": 3.995145631067961, "distancia_prom_km": 89.45874722761315, "score_volumen": 8.798849196835292, "score_puntualidad": 65.19704719832598, "score_flete": 99.23946914241196, "score_satisfaccion": 74.87864077669903, "indice_desempeno": 60.3, "lat_origen": -23.570860168123772, "lng_origen": -46.63324168698217, "lat_destino": -22.900868230378116, "lng_destino": -47.068536847474405}, {"seller_city": "piracicaba", "customer_city": "sao paulo", "volumen": 331, "gmv": 38539.75, "atraso_prom": -10.37084398976982, "flete_por_km_prom": 0.07890080176953773, "review_prom": 4.232142857142857, "distancia_prom_km": 142.6331300110657, "score_volumen": 7.887796691440902, "score_puntualidad": 67.75775097803343, "score_flete": 99.55478113103727, "score_satisfaccion": 80.80357142857142, "indice_desempeno": 62.4, "lat_origen": -22.725841079430882, "lng_origen": -47.646621915541594, "lat_destino": -23.570860168123772, "lng_destino": -46.63324168698217}, {"seller_city": "guarulhos", "customer_city": "sao paulo", "volumen": 326, "gmv": 50430.659999999996, "atraso_prom": -8.894021739130435, "flete_por_km_prom": 0.8293864573305567, "review_prom": 3.9634464751958225, "distancia_prom_km": 19.57957415483042, "score_volumen": 7.767921361783745, "score_puntualidad": 66.2984404536862, "score_flete": 94.17911353236046, "score_satisfaccion": 74.08616187989556, "indice_desempeno": 59.2, "lat_origen": -23.446403450610912, "lng_origen": -46.4987684618031, "lat_destino": -23.570860168123772, "lng_destino": -46.63324168698217}, {"seller_city": "sao paulo", "customer_city": "guarulhos", "volumen": 325, "gmv": 31730.12, "atraso_prom": -8.836257309941521, "flete_por_km_prom": 0.6810579804416063, "review_prom": 3.9426934097421205, "distancia_prom_km": 20.648688013654933, "score_volumen": 7.7439462958523135, "score_puntualidad": 66.24136097820309, "score_flete": 95.24157832601058, "score_satisfaccion": 73.56733524355302, "indice_desempeno": 59.2, "lat_origen": -23.570860168123772, "lng_origen": -46.63324168698217, "lat_destino": -23.446403450610912, "lng_destino": -46.4987684618031}, {"seller_city": "ribeirao preto", "customer_city": "sao paulo", "volumen": 318, "gmv": 50106.85, "atraso_prom": -9.830555555555556, "flete_por_km_prom": 0.045865334378300406, "review_prom": 4.090909090909091, "distancia_prom_km": 293.09772900884144, "score_volumen": 7.576120834332295, "score_puntualidad": 67.22386912604304, "score_flete": 99.79141149211921, "score_satisfaccion": 77.27272727272727, "indice_desempeno": 61.3, "lat_origen": -21.18075063440761, "lng_origen": -47.804281096227626, "lat_destino": -23.570860168123772, "lng_destino": -46.63324168698217}, {"seller_city": "sao paulo", "customer_city": "sao bernardo do campo", "volumen": 269, "gmv": 27028.420000000002, "atraso_prom": -10.35064935064935, "flete_por_km_prom": 0.631733455626451, "review_prom": 4.410828025477707, "distancia_prom_km": 19.291172905345736, "score_volumen": 6.40134260369216, "score_puntualidad": 67.7377958010369, "score_flete": 95.59488587813262, "score_satisfaccion": 85.27070063694266, "indice_desempeno": 62.4, "lat_origen": -23.570860168123772, "lng_origen": -46.63324168698217, "lat_destino": -23.707626338404054, "lng_destino": -46.56386871942162}, {"seller_city": "sao jose do rio preto", "customer_city": "sao paulo", "volumen": 236, "gmv": 27242.760000000002, "atraso_prom": -11.445578231292517, "flete_por_km_prom": 0.03801106794253068, "review_prom": 4.172185430463577, "distancia_prom_km": 417.1025842280574, "score_volumen": 5.610165427954927, "score_puntualidad": 68.81974133526928, "score_flete": 99.84767096260646, "score_satisfaccion": 79.30463576158941, "indice_desempeno": 61.8, "lat_origen": -20.80964107209363, "lng_origen": -49.37964503407105, "lat_destino": -23.570860168123772, "lng_destino": -46.63324168698217}, {"seller_city": "praia grande", "customer_city": "sao paulo", "volumen": 234, "gmv": 16475.69, "atraso_prom": -9.155642023346303, "flete_por_km_prom": 0.1788763322666125, "review_prom": 4.274131274131274, "distancia_prom_km": 54.08916771444503, "score_volumen": 5.562215296092064, "score_puntualidad": 66.55695852109318, "score_flete": 98.83866455243073, "score_satisfaccion": 81.85328185328184, "indice_desempeno": 61.6, "lat_origen": -24.02142365584944, "lng_origen": -46.46182393815411, "lat_destino": -23.570860168123772, "lng_destino": -46.63324168698217}, {"seller_city": "campinas", "customer_city": "sao paulo", "volumen": 216, "gmv": 32250.81, "atraso_prom": -8.192660550458715, "flete_por_km_prom": 0.11445013425743268, "review_prom": 4.0, "distancia_prom_km": 87.53745418595733, "score_volumen": 5.130664109326301, "score_puntualidad": 65.60539580084853, "score_flete": 99.3001441591062, "score_satisfaccion": 75.0, "indice_desempeno": 59.6, "lat_origen": -22.900868230378116, "lng_origen": -47.068536847474405, "lat_destino": -23.570860168123772, "lng_destino": -46.63324168698217}, {"seller_city": "sao paulo", "customer_city": "santo andre", "volumen": 206, "gmv": 19897.22, "atraso_prom": -9.853982300884956, "flete_por_km_prom": 0.7340337066757379, "review_prom": 4.151515151515151, "distancia_prom_km": 17.04698071410799, "score_volumen": 4.890913450011988, "score_puntualidad": 67.24701808387842, "score_flete": 94.86211751563665, "score_satisfaccion": 78.78787878787878, "indice_desempeno": 60.1, "lat_origen": -23.570860168123772, "lng_origen": -46.63324168698217, "lat_destino": -23.66003109137579, "lng_destino": -46.52196585166827}, {"seller_city": "sao bernardo do campo", "customer_city": "sao paulo", "volumen": 200, "gmv": 32565.05, "atraso_prom": -7.958715596330276, "flete_por_km_prom": 0.6019197782363447, "review_prom": 4.255605381165919, "distancia_prom_km": 20.07587129557251, "score_volumen": 4.7470630544234, "score_puntualidad": 65.37422489755957, "score_flete": 95.80843881995878, "score_satisfaccion": 81.39013452914799, "indice_desempeno": 60.3, "lat_origen": -23.707626338404054, "lng_origen": -46.56386871942162, "lat_destino": -23.570860168123772, "lng_destino": -46.63324168698217}, {"seller_city": "sao paulo", "customer_city": "santos", "volumen": 196, "gmv": 24663.24, "atraso_prom": -8.265486725663717, "flete_por_km_prom": 0.22447783035183133, "review_prom": 4.263392857142857, "distancia_prom_km": 52.625538649356066, "score_volumen": 4.651162790697675, "score_puntualidad": 65.6773584245689, "score_flete": 98.51202473741043, "score_satisfaccion": 81.58482142857142, "indice_desempeno": 61.0, "lat_origen": -23.570860168123772, "lng_origen": -46.63324168698217, "lat_destino": -23.96252319074522, "lng_destino": -46.32780350647337}, {"seller_city": "sao paulo", "customer_city": "osasco", "volumen": 194, "gmv": 17386.48, "atraso_prom": -9.486842105263158, "flete_por_km_prom": 0.5950764687762562, "review_prom": 4.148471615720524, "distancia_prom_km": 19.837096270296005, "score_volumen": 4.603212658834812, "score_puntualidad": 66.88423132931142, "score_flete": 95.85745688800542, "score_satisfaccion": 78.7117903930131, "indice_desempeno": 60.1, "lat_origen": -23.570860168123772, "lng_origen": -46.63324168698217, "lat_destino": -23.536560947810024, "lng_destino": -46.788283628866644}, {"seller_city": "sao paulo", "customer_city": "sao jose dos campos", "volumen": 188, "gmv": 20830.89, "atraso_prom": -9.341463414634147, "flete_por_km_prom": 0.1266546894012008, "review_prom": 4.346153846153846, "distancia_prom_km": 85.35667686653417, "score_volumen": 4.459362263246224, "score_puntualidad": 66.74057649667407, "score_flete": 99.21272392507977, "score_satisfaccion": 83.65384615384615, "indice_desempeno": 61.9, "lat_origen": -23.570860168123772, "lng_origen": -46.63324168698217, "lat_destino": -23.21087970704399, "lng_destino": -45.885186496537024}, {"seller_city": "sao paulo", "customer_city": "sorocaba", "volumen": 182, "gmv": 21000.79, "atraso_prom": -9.73134328358209, "flete_por_km_prom": 0.13277371030787888, "review_prom": 4.1182266009852215, "distancia_prom_km": 88.97846209701851, "score_volumen": 4.315511867657636, "score_puntualidad": 67.12583328417202, "score_flete": 99.16889387692373, "score_satisfaccion": 77.95566502463053, "indice_desempeno": 60.5, "lat_origen": -23.570860168123772, "lng_origen": -46.63324168698217, "lat_destino": -23.485346151382075, "lng_destino": -47.464450005691745}, {"seller_city": "salto", "customer_city": "sao paulo", "volumen": 173, "gmv": 18614.84, "atraso_prom": -7.803370786516854, "flete_por_km_prom": 0.1506147904575567, "review_prom": 4.262569832402234, "distancia_prom_km": 80.57103569594875, "score_volumen": 4.099736274274754, "score_puntualidad": 65.22072212106409, "score_flete": 99.04109967356308, "score_satisfaccion": 81.56424581005585, "indice_desempeno": 60.8, "lat_origen": -23.19676253260492, "lng_origen": -47.292606359513954, "lat_destino": -23.570860168123772, "lng_destino": -46.63324168698217}, {"seller_city": "itaquaquecetuba", "customer_city": "sao paulo", "volumen": 169, "gmv": 36481.270000000004, "atraso_prom": -11.113636363636363, "flete_por_km_prom": 0.9436108989017177, "review_prom": 3.3513513513513513, "distancia_prom_km": 29.506393931830836, "score_volumen": 4.003836010549029, "score_puntualidad": 68.49173553719008, "score_flete": 93.36093316477965, "score_satisfaccion": 58.78378378378378, "indice_desempeno": 54.9, "lat_origen": -23.470259427376792, "lng_origen": -46.34277286562584, "lat_destino": -23.570860168123772, "lng_destino": -46.63324168698217}, {"seller_city": "guariba", "customer_city": "sao paulo", "volumen": 162, "gmv": 35847.5, "atraso_prom": -10.89090909090909, "flete_por_km_prom": 0.04637930820811027, "review_prom": 4.221556886227545, "distancia_prom_km": 296.3560238351596, "score_volumen": 3.8360105490290097, "score_puntualidad": 68.27164929931729, "score_flete": 99.78772993945661, "score_satisfaccion": 80.53892215568862, "indice_desempeno": 61.5, "lat_origen": -21.36350170979939, "lng_origen": -48.22960077888057, "lat_destino": -23.570860168123772, "lng_destino": -46.63324168698217}, {"seller_city": "limeira", "customer_city": "sao paulo", "volumen": 159, "gmv": 18847.7, "atraso_prom": -8.508108108108107, "flete_por_km_prom": 0.08669833687027956, "review_prom": 4.413978494623656, "distancia_prom_km": 137.6080458669698, "score_volumen": 3.764085351234716, "score_puntualidad": 65.91710287362461, "score_flete": 99.49892802248016, "score_satisfaccion": 85.34946236559139, "indice_desempeno": 62.0, "lat_origen": -22.573478963977, "lng_origen": -47.408479247924, "lat_destino": -23.570860168123772, "lng_destino": -46.63324168698217}, {"seller_city": "campo limpo paulista", "customer_city": "sao paulo", "volumen": 153, "gmv": 15374.7, "atraso_prom": -12.871951219512194, "flete_por_km_prom": 0.3711947952501708, "review_prom": 4.121212121212121, "distancia_prom_km": 42.52245932591902, "score_volumen": 3.620234955646128, "score_puntualidad": 70.22920080979466, "score_flete": 97.46110307283762, "score_satisfaccion": 78.03030303030303, "indice_desempeno": 61.0, "lat_origen": -23.21221676734244, "lng_origen": -46.77576640852021, "lat_destino": -23.570860168123772, "lng_destino": -46.63324168698217}, {"seller_city": "sao paulo", "customer_city": "jundiai", "volumen": 143, "gmv": 16596.55, "atraso_prom": -9.709677419354838, "flete_por_km_prom": 0.2213768057203794, "review_prom": 4.288461538461538, "distancia_prom_km": 53.45367539155042, "score_volumen": 3.380484296331815, "score_puntualidad": 67.10442432742573, "score_flete": 98.53423712416355, "score_satisfaccion": 82.21153846153845, "indice_desempeno": 61.2, "lat_origen": -23.570860168123772, "lng_origen": -46.63324168698217, "lat_destino": -23.18567574426163, "lng_destino": -46.90259409644344}, {"seller_city": "sao jose dos campos", "customer_city": "sao paulo", "volumen": 141, "gmv": 24483.94, "atraso_prom": -8.928571428571429, "flete_por_km_prom": 0.12732825079388324, "review_prom": 3.715686274509804, "distancia_prom_km": 85.36647676390704, "score_volumen": 3.3325341644689526, "score_puntualidad": 66.33258046301525, "score_flete": 99.20789925970804, "score_satisfaccion": 67.8921568627451, "indice_desempeno": 57.5, "lat_origen": -23.21087970704399, "lng_origen": -45.885186496537024, "lat_destino": -23.570860168123772, "lng_destino": -46.63324168698217}, {"seller_city": "pedreira", "customer_city": "sao paulo", "volumen": 136, "gmv": 11410.53, "atraso_prom": -11.281045751633988, "flete_por_km_prom": 0.1644221361125993, "review_prom": 4.131578947368421, "distancia_prom_km": 96.15571388121067, "score_volumen": 3.2126588348117955, "score_puntualidad": 68.65715983363043, "score_flete": 98.94219878170519, "score_satisfaccion": 78.28947368421053, "indice_desempeno": 60.8, "lat_origen": -22.74032548616481, "lng_origen": -46.896753691339335, "lat_destino": -23.570860168123772, "lng_destino": -46.63324168698217}, {"seller_city": "jacarei", "customer_city": "sao paulo", "volumen": 135, "gmv": 16152.34, "atraso_prom": -9.714285714285714, "flete_por_km_prom": 0.14636019005577214, "review_prom": 3.9859154929577465, "distancia_prom_km": 74.79248239180929, "score_volumen": 3.188683768880365, "score_puntualidad": 67.10897797854321, "score_flete": 99.07157502956184, "score_satisfaccion": 74.64788732394366, "indice_desempeno": 59.4, "lat_origen": -23.296728672789843, "lng_origen": -45.96374124064235, "lat_destino": -23.570860168123772, "lng_destino": -46.63324168698217}, {"seller_city": "atibaia", "customer_city": "sao paulo", "volumen": 123, "gmv": 10791.68, "atraso_prom": -8.476190476190476, "flete_por_km_prom": 0.194919475138898, "review_prom": 4.223076923076923, "distancia_prom_km": 53.84317270023431, "score_volumen": 2.9009829777031886, "score_puntualidad": 65.88556371165066, "score_flete": 98.72374882728603, "score_satisfaccion": 80.57692307692308, "indice_desempeno": 60.4, "lat_origen": -23.123134519244505, "lng_origen": -46.560481987331165, "lat_destino": -23.570860168123772, "lng_destino": -46.63324168698217}, {"seller_city": "sorocaba", "customer_city": "sao paulo", "volumen": 115, "gmv": 10647.26, "atraso_prom": -9.712, "flete_por_km_prom": 0.15281859323804028, "review_prom": 4.126984126984127, "distancia_prom_km": 83.91796882826708, "score_volumen": 2.7091824502517383, "score_puntualidad": 67.10671936758894, "score_flete": 99.02531401381977, "score_satisfaccion": 78.17460317460319, "indice_desempeno": 60.2, "lat_origen": -23.485346151382075, "lng_origen": -47.464450005691745, "lat_destino": -23.570860168123772, "lng_destino": -46.63324168698217}, {"seller_city": "sao paulo", "customer_city": "ribeirao preto", "volumen": 113, "gmv": 13522.73, "atraso_prom": -12.94488188976378, "flete_por_km_prom": 0.04804494619448199, "review_prom": 4.299212598425197, "distancia_prom_km": 293.04334137255034, "score_volumen": 2.6612323183888753, "score_puntualidad": 70.30126668948989, "score_flete": 99.77579911028204, "score_satisfaccion": 82.48031496062993, "indice_desempeno": 62.3, "lat_origen": -23.570860168123772, "lng_origen": -46.63324168698217, "lat_destino": -21.18075063440761, "lng_destino": -47.804281096227626}, {"seller_city": "sao paulo", "customer_city": "barueri", "volumen": 112, "gmv": 11739.19, "atraso_prom": -8.529411764705882, "flete_por_km_prom": 0.41817658179620054, "review_prom": 4.221311475409836, "distancia_prom_km": 29.335138801144335, "score_volumen": 2.6372572524574442, "score_puntualidad": 65.93815391769357, "score_flete": 97.12457636404311, "score_satisfaccion": 80.5327868852459, "indice_desempeno": 60.0, "lat_origen": -23.570860168123772, "lng_origen": -46.63324168698217, "lat_destino": -23.50591265074973, "lng_destino": -46.86935863185775}, {"seller_city": "osasco", "customer_city": "sao paulo", "volumen": 111, "gmv": 19655.97, "atraso_prom": -8.35483870967742, "flete_por_km_prom": 0.9408923211306279, "review_prom": 4.173228346456693, "distancia_prom_km": 18.348777891742195, "score_volumen": 2.6132821865260127, "score_puntualidad": 65.76565089889074, "score_flete": 93.38040611583506, "score_satisfaccion": 79.33070866141732, "indice_desempeno": 58.9, "lat_origen": -23.536560947810024, "lng_origen": -46.788283628866644, "lat_destino": -23.570860168123772, "lng_destino": -46.63324168698217}, {"seller_city": "sao paulo", "customer_city": "mogi das cruzes", "volumen": 102, "gmv": 13077.51, "atraso_prom": -9.495575221238939, "flete_por_km_prom": 0.2826722174620157, "review_prom": 4.205357142857143, "distancia_prom_km": 44.58644133953331, "score_volumen": 2.397506593143131, "score_puntualidad": 66.8928608905523, "score_flete": 98.09518308441545, "score_satisfaccion": 80.13392857142858, "indice_desempeno": 60.3, "lat_origen": -23.570860168123772, "lng_origen": -46.63324168698217, "lat_destino": -23.530401558443817, "lng_destino": -46.19388795902843}, {"seller_city": "santos", "customer_city": "sao paulo", "volumen": 101, "gmv": 10162.9, "atraso_prom": -9.019047619047619, "flete_por_km_prom": 0.20666708733949393, "review_prom": 4.08256880733945, "distancia_prom_km": 52.68238974117427, "score_volumen": 2.3735315272117, "score_puntualidad": 66.42198381328816, "score_flete": 98.63960163832829, "score_satisfaccion": 77.06422018348624, "indice_desempeno": 59.5, "lat_origen": -23.96252319074522, "lng_origen": -46.32780350647337, "lat_destino": -23.570860168123772, "lng_destino": -46.63324168698217}, {"seller_city": "ibitinga", "customer_city": "campinas", "volumen": 101, "gmv": 11801.72, "atraso_prom": -10.13076923076923, "flete_por_km_prom": 0.06513813037682013, "review_prom": 3.9153846153846152, "distancia_prom_km": 221.11152042097154, "score_volumen": 2.3735315272117, "score_puntualidad": 67.52052295530557, "score_flete": 99.65336202479435, "score_satisfaccion": 72.88461538461539, "indice_desempeno": 59.0, "lat_origen": -21.75732063771276, "lng_origen": -48.82974353343716, "lat_destino": -22.900868230378116, "lng_destino": -47.068536847474405}, {"seller_city": "sao paulo", "customer_city": "piracicaba", "volumen": 100, "gmv": 16034.25, "atraso_prom": -10.513043478260869, "flete_por_km_prom": 0.08994412107145874, "review_prom": 4.177966101694915, "distancia_prom_km": 142.89499144590488, "score_volumen": 2.3495564612802684, "score_puntualidad": 67.8982643065819, "score_flete": 99.47567873472458, "score_satisfaccion": 79.44915254237289, "indice_desempeno": 60.7, "lat_origen": -23.570860168123772, "lng_origen": -46.63324168698217, "lat_destino": -22.725841079430882, "lng_destino": -47.646621915541594}, {"seller_city": "maua", "customer_city": "sao paulo", "volumen": 95, "gmv": 6843.17, "atraso_prom": -10.247706422018348, "flete_por_km_prom": 0.4370574580083986, "review_prom": 4.071428571428571, "distancia_prom_km": 24.609187073140777, "score_volumen": 2.229681131623112, "score_puntualidad": 67.63607353954382, "score_flete": 96.98933418621272, "score_satisfaccion": 76.78571428571428, "indice_desempeno": 59.4, "lat_origen": -23.669993795741274, "lng_origen": -46.4489086924047, "lat_destino": -23.570860168123772, "lng_destino": -46.63324168698217}, {"seller_city": "sao paulo", "customer_city": "maua", "volumen": 92, "gmv": 7414.55, "atraso_prom": -8.145833333333334, "flete_por_km_prom": 0.48964189819993514, "review_prom": 4.275510204081633, "distancia_prom_km": 23.05697087088983, "score_volumen": 2.157755933828818, "score_puntualidad": 65.55912384716733, "score_flete": 96.61267612587858, "score_satisfaccion": 81.88775510204083, "indice_desempeno": 60.0, "lat_origen": -23.570860168123772, "lng_origen": -46.63324168698217, "lat_destino": -23.669993795741274, "lng_destino": -46.4489086924047}, {"seller_city": "sao paulo", "customer_city": "carapicuiba", "volumen": 92, "gmv": 8358.74, "atraso_prom": -8.83, "flete_por_km_prom": 0.4244251018066293, "review_prom": 4.056603773584905, "distancia_prom_km": 24.980538131213592, "score_volumen": 2.157755933828818, "score_puntualidad": 66.23517786561266, "score_flete": 97.07981872435893, "score_satisfaccion": 76.41509433962264, "indice_desempeno": 58.9, "lat_origen": -23.570860168123772, "lng_origen": -46.63324168698217, "lat_destino": -23.545578557335283, "lng_destino": -46.838775575768985}, {"seller_city": "sao paulo", "customer_city": "praia grande", "volumen": 88, "gmv": 9863.31, "atraso_prom": -7.775510204081633, "flete_por_km_prom": 0.21382629367210085, "review_prom": 4.089108910891089, "distancia_prom_km": 52.964550496117056, "score_volumen": 2.0618556701030926, "score_puntualidad": 65.19319190126643, "score_flete": 98.58832082672414, "score_satisfaccion": 77.22772277227723, "indice_desempeno": 59.1, "lat_origen": -23.570860168123772, "lng_origen": -46.63324168698217, "lat_destino": -24.02142365584944, "lng_destino": -46.46182393815411}], "stats": {"dispersion_distancia_entrega": [{"count": 16974, "distancia_km": 74.48, "dias_entrega": 3.72}, {"count": 9636, "distancia_km": 128.87, "dias_entrega": 9.13}, {"count": 2263, "distancia_km": 141.13, "dias_entrega": 16.25}, {"count": 668, "distancia_km": 146.71, "dias_entrega": 23.35}, {"count": 226, "distancia_km": 147.59, "dias_entrega": 30.57}, {"count": 91, "distancia_km": 151.83, "dias_entrega": 37.22}, {"count": 67, "distancia_km": 165.99, "dias_entrega": 44.33}, {"count": 17, "distancia_km": 141.76, "dias_entrega": 51.95}, {"count": 9, "distancia_km": 142.23, "dias_entrega": 59.11}, {"count": 9, "distancia_km": 136.6, "dias_entrega": 67.2}, {"count": 7, "distancia_km": 103.21, "dias_entrega": 71.88}, {"count": 1, "distancia_km": 26.49, "dias_entrega": 78.0}, {"count": 2, "distancia_km": 190.23, "dias_entrega": 86.5}, {"count": 1, "distancia_km": 11.78, "dias_entrega": 96.0}, {"count": 4, "distancia_km": 187.59, "dias_entrega": 101.25}, {"count": 3, "distancia_km": 90.85, "dias_entrega": 106.0}, {"count": 3, "distancia_km": 31.34, "dias_entrega": 116.67}, {"count": 1, "distancia_km": 91.69, "dias_entrega": 175.0}, {"count": 1, "distancia_km": 285.08, "dias_entrega": 187.0}, {"count": 1, "distancia_km": 90.56, "dias_entrega": 191.0}, {"count": 6852, "distancia_km": 408.53, "dias_entrega": 4.9}, {"count": 15938, "distancia_km": 416.96, "dias_entrega": 9.56}, {"count": 5584, "distancia_km": 425.84, "dias_entrega": 16.31}, {"count": 1878, "distancia_km": 429.17, "dias_entrega": 23.42}, {"count": 763, "distancia_km": 420.97, "dias_entrega": 30.42}, {"count": 379, "distancia_km": 426.06, "dias_entrega": 37.68}, {"count": 189, "distancia_km": 416.74, "dias_entrega": 44.58}, {"count": 97, "distancia_km": 432.58, "dias_entrega": 51.64}, {"count": 54, "distancia_km": 405.57, "dias_entrega": 58.18}, {"count": 25, "distancia_km": 432.94, "dias_entrega": 65.92}, {"count": 16, "distancia_km": 402.73, "dias_entrega": 72.56}, {"count": 7, "distancia_km": 423.19, "dias_entrega": 79.71}, {"count": 6, "distancia_km": 336.88, "dias_entrega": 85.25}, {"count": 2, "distancia_km": 345.69, "dias_entrega": 94.0}, {"count": 3, "distancia_km": 385.03, "dias_entrega": 101.67}, {"count": 2, "distancia_km": 426.15, "dias_entrega": 107.0}, {"count": 4, "distancia_km": 388.17, "dias_entrega": 129.75}, {"count": 2, "distancia_km": 336.27, "dias_entrega": 144.0}, {"count": 1, "distancia_km": 373.78, "dias_entrega": 173.0}, {"count": 2, "distancia_km": 378.95, "dias_entrega": 208.5}, {"count": 1537, "distancia_km": 726.59, "dias_entrega": 5.11}, {"count": 7336, "distancia_km": 728.14, "dias_entrega": 9.85}, {"count": 3687, "distancia_km": 727.83, "dias_entrega": 16.51}, {"count": 1307, "distancia_km": 727.2, "dias_entrega": 23.38}, {"count": 504, "distancia_km": 728.02, "dias_entrega": 30.51}, {"count": 245, "distancia_km": 713.05, "dias_entrega": 37.41}, {"count": 112, "distancia_km": 723.36, "dias_entrega": 44.56}, {"count": 56, "distancia_km": 711.56, "dias_entrega": 51.76}, {"count": 28, "distancia_km": 708.2, "dias_entrega": 57.94}, {"count": 16, "distancia_km": 720.26, "dias_entrega": 66.35}, {"count": 9, "distancia_km": 704.48, "dias_entrega": 72.67}, {"count": 5, "distancia_km": 746.19, "dias_entrega": 79.6}, {"count": 2, "distancia_km": 726.6, "dias_entrega": 84.5}, {"count": 4, "distancia_km": 687.28, "dias_entrega": 94.8}, {"count": 2, "distancia_km": 658.46, "dias_entrega": 100.5}, {"count": 1, "distancia_km": 663.74, "dias_entrega": 107.0}, {"count": 1, "distancia_km": 856.54, "dias_entrega": 136.0}, {"count": 1, "distancia_km": 785.2, "dias_entrega": 143.0}, {"count": 1, "distancia_km": 669.56, "dias_entrega": 165.0}, {"count": 1, "distancia_km": 863.99, "dias_entrega": 181.0}, {"count": 1, "distancia_km": 858.59, "dias_entrega": 186.0}, {"count": 1, "distancia_km": 828.83, "dias_entrega": 189.0}, {"count": 539, "distancia_km": 961.56, "dias_entrega": 5.29}, {"count": 3364, "distancia_km": 975.31, "dias_entrega": 9.95}, {"count": 1943, "distancia_km": 982.58, "dias_entrega": 16.47}, {"count": 714, "distancia_km": 982.38, "dias_entrega": 23.39}, {"count": 259, "distancia_km": 992.58, "dias_entrega": 30.46}, {"count": 144, "distancia_km": 983.33, "dias_entrega": 37.46}, {"count": 65, "distancia_km": 978.57, "dias_entrega": 44.41}, {"count": 30, "distancia_km": 1021.58, "dias_entrega": 51.61}, {"count": 20, "distancia_km": 971.43, "dias_entrega": 59.08}, {"count": 6, "distancia_km": 1002.84, "dias_entrega": 65.29}, {"count": 3, "distancia_km": 1056.64, "dias_entrega": 71.67}, {"count": 1, "distancia_km": 1083.01, "dias_entrega": 78.0}, {"count": 1, "distancia_km": 966.28, "dias_entrega": 86.0}, {"count": 1, "distancia_km": 1130.54, "dias_entrega": 124.0}, {"count": 1, "distancia_km": 894.17, "dias_entrega": 133.0}, {"count": 1, "distancia_km": 1028.07, "dias_entrega": 141.0}, {"count": 1, "distancia_km": 909.27, "dias_entrega": 148.0}, {"count": 1, "distancia_km": 1024.22, "dias_entrega": 168.0}, {"count": 1, "distancia_km": 1066.39, "dias_entrega": 182.0}, {"count": 110, "distancia_km": 1295.07, "dias_entrega": 4.85}, {"count": 1079, "distancia_km": 1285.04, "dias_entrega": 10.44}, {"count": 979, "distancia_km": 1289.5, "dias_entrega": 16.74}, {"count": 441, "distancia_km": 1299.07, "dias_entrega": 23.34}, {"count": 181, "distancia_km": 1297.94, "dias_entrega": 30.81}, {"count": 78, "distancia_km": 1278.83, "dias_entrega": 37.65}, {"count": 42, "distancia_km": 1284.72, "dias_entrega": 44.85}, {"count": 13, "distancia_km": 1299.25, "dias_entrega": 51.43}, {"count": 7, "distancia_km": 1243.61, "dias_entrega": 57.25}, {"count": 7, "distancia_km": 1312.57, "dias_entrega": 65.18}, {"count": 3, "distancia_km": 1338.48, "dias_entrega": 74.33}, {"count": 2, "distancia_km": 1279.72, "dias_entrega": 79.0}, {"count": 1, "distancia_km": 1198.62, "dias_entrega": 99.0}, {"count": 2, "distancia_km": 1252.33, "dias_entrega": 108.0}, {"count": 1, "distancia_km": 1293.39, "dias_entrega": 130.0}, {"count": 1, "distancia_km": 1399.02, "dias_entrega": 146.0}, {"count": 1, "distancia_km": 1158.24, "dias_entrega": 167.0}, {"count": 75, "distancia_km": 1538.97, "dias_entrega": 5.24}, {"count": 894, "distancia_km": 1548.35, "dias_entrega": 10.27}, {"count": 825, "distancia_km": 1553.85, "dias_entrega": 16.71}, {"count": 406, "distancia_km": 1559.45, "dias_entrega": 23.5}, {"count": 191, "distancia_km": 1550.96, "dias_entrega": 30.12}, {"count": 74, "distancia_km": 1569.93, "dias_entrega": 37.56}, {"count": 47, "distancia_km": 1578.6, "dias_entrega": 44.56}, {"count": 15, "distancia_km": 1592.15, "dias_entrega": 51.8}, {"count": 5, "distancia_km": 1592.76, "dias_entrega": 58.6}, {"count": 2, "distancia_km": 1579.34, "dias_entrega": 68.0}, {"count": 2, "distancia_km": 1626.06, "dias_entrega": 75.5}, {"count": 2, "distancia_km": 1513.03, "dias_entrega": 82.5}, {"count": 1, "distancia_km": 1576.57, "dias_entrega": 106.0}, {"count": 1, "distancia_km": 1497.85, "dias_entrega": 135.0}, {"count": 1, "distancia_km": 1527.28, "dias_entrega": 167.0}, {"count": 1, "distancia_km": 1475.19, "dias_entrega": 194.0}, {"count": 23, "distancia_km": 1909.0, "dias_entrega": 4.96}, {"count": 552, "distancia_km": 1891.13, "dias_entrega": 10.52}, {"count": 637, "distancia_km": 1890.66, "dias_entrega": 16.64}, {"count": 333, "distancia_km": 1894.5, "dias_entrega": 23.46}, {"count": 167, "distancia_km": 1897.23, "dias_entrega": 30.57}, {"count": 83, "distancia_km": 1883.51, "dias_entrega": 37.46}, {"count": 37, "distancia_km": 1894.69, "dias_entrega": 44.64}, {"count": 28, "distancia_km": 1912.45, "dias_entrega": 50.76}, {"count": 4, "distancia_km": 1921.35, "dias_entrega": 59.25}, {"count": 4, "distancia_km": 1859.48, "dias_entrega": 66.0}, {"count": 4, "distancia_km": 1876.56, "dias_entrega": 70.75}, {"count": 4, "distancia_km": 1849.76, "dias_entrega": 80.8}, {"count": 2, "distancia_km": 1783.85, "dias_entrega": 86.0}, {"count": 1, "distancia_km": 1823.9, "dias_entrega": 188.0}, {"count": 52, "distancia_km": 2132.35, "dias_entrega": 5.34}, {"count": 814, "distancia_km": 2155.24, "dias_entrega": 10.61}, {"count": 980, "distancia_km": 2165.18, "dias_entrega": 16.73}, {"count": 573, "distancia_km": 2168.98, "dias_entrega": 23.6}, {"count": 227, "distancia_km": 2165.53, "dias_entrega": 30.82}, {"count": 125, "distancia_km": 2161.79, "dias_entrega": 37.47}, {"count": 82, "distancia_km": 2174.64, "dias_entrega": 44.77}, {"count": 34, "distancia_km": 2172.45, "dias_entrega": 51.25}, {"count": 12, "distancia_km": 2166.55, "dias_entrega": 58.64}, {"count": 5, "distancia_km": 2088.22, "dias_entrega": 66.4}, {"count": 5, "distancia_km": 2203.63, "dias_entrega": 72.2}, {"count": 2, "distancia_km": 2287.48, "dias_entrega": 77.5}, {"count": 3, "distancia_km": 2099.78, "dias_entrega": 86.33}, {"count": 2, "distancia_km": 2232.36, "dias_entrega": 102.5}, {"count": 1, "distancia_km": 2253.85, "dias_entrega": 110.0}, {"count": 1, "distancia_km": 2289.16, "dias_entrega": 126.0}, {"count": 1, "distancia_km": 2232.82, "dias_entrega": 138.0}, {"count": 1, "distancia_km": 2175.15, "dias_entrega": 142.0}, {"count": 1, "distancia_km": 2139.88, "dias_entrega": 166.0}, {"count": 1, "distancia_km": 2172.72, "dias_entrega": 174.0}, {"count": 3, "distancia_km": 2103.45, "dias_entrega": 194.33}, {"count": 38, "distancia_km": 2379.19, "dias_entrega": 5.17}, {"count": 485, "distancia_km": 2404.25, "dias_entrega": 10.47}, {"count": 578, "distancia_km": 2404.55, "dias_entrega": 16.75}, {"count": 394, "distancia_km": 2415.51, "dias_entrega": 23.67}, {"count": 185, "distancia_km": 2418.93, "dias_entrega": 30.9}, {"count": 78, "distancia_km": 2431.3, "dias_entrega": 37.99}, {"count": 49, "distancia_km": 2413.92, "dias_entrega": 44.65}, {"count": 26, "distancia_km": 2424.58, "dias_entrega": 51.19}, {"count": 6, "distancia_km": 2403.95, "dias_entrega": 58.67}, {"count": 5, "distancia_km": 2432.1, "dias_entrega": 65.0}, {"count": 6, "distancia_km": 2371.94, "dias_entrega": 72.33}, {"count": 2, "distancia_km": 2350.03, "dias_entrega": 80.5}, {"count": 1, "distancia_km": 2372.32, "dias_entrega": 91.0}, {"count": 1, "distancia_km": 2367.18, "dias_entrega": 138.0}, {"count": 1, "distancia_km": 2435.15, "dias_entrega": 187.0}, {"count": 9, "distancia_km": 2701.75, "dias_entrega": 5.1}, {"count": 90, "distancia_km": 2729.75, "dias_entrega": 10.85}, {"count": 142, "distancia_km": 2709.33, "dias_entrega": 16.78}, {"count": 107, "distancia_km": 2710.65, "dias_entrega": 23.87}, {"count": 71, "distancia_km": 2701.99, "dias_entrega": 30.84}, {"count": 29, "distancia_km": 2686.71, "dias_entrega": 37.47}, {"count": 15, "distancia_km": 2719.81, "dias_entrega": 44.56}, {"count": 2, "distancia_km": 2753.56, "dias_entrega": 49.5}, {"count": 3, "distancia_km": 2740.3, "dias_entrega": 57.0}, {"count": 1, "distancia_km": 2674.39, "dias_entrega": 63.0}, {"count": 2, "distancia_km": 2737.25, "dias_entrega": 71.0}, {"count": 1, "distancia_km": 2772.86, "dias_entrega": 90.0}, {"count": 1, "distancia_km": 2619.38, "dias_entrega": 168.0}, {"count": 4, "distancia_km": 3029.65, "dias_entrega": 5.0}, {"count": 38, "distancia_km": 3063.54, "dias_entrega": 10.93}, {"count": 30, "distancia_km": 3056.3, "dias_entrega": 15.94}, {"count": 26, "distancia_km": 3001.16, "dias_entrega": 23.23}, {"count": 16, "distancia_km": 3080.9, "dias_entrega": 29.68}, {"count": 11, "distancia_km": 3064.86, "dias_entrega": 37.82}, {"count": 4, "distancia_km": 3033.97, "dias_entrega": 45.0}, {"count": 1, "distancia_km": 3034.68, "dias_entrega": 53.0}, {"count": 1, "distancia_km": 3142.49, "dias_entrega": 57.0}, {"count": 2, "distancia_km": 3006.81, "dias_entrega": 72.0}, {"count": 1, "distancia_km": 3305.53, "dias_entrega": 6.0}, {"count": 11, "distancia_km": 3273.79, "dias_entrega": 10.0}, {"count": 12, "distancia_km": 3251.32, "dias_entrega": 15.92}, {"count": 13, "distancia_km": 3290.48, "dias_entrega": 23.85}, {"count": 7, "distancia_km": 3327.5, "dias_entrega": 30.75}, {"count": 4, "distancia_km": 3243.81, "dias_entrega": 37.5}, {"count": 2, "distancia_km": 3315.77, "dias_entrega": 53.0}, {"count": 1, "distancia_km": 3228.57, "dias_entrega": 66.0}, {"count": 1, "distancia_km": 3319.14, "dias_entrega": 71.0}, {"count": 1, "distancia_km": 3301.6, "dias_entrega": 172.0}, {"count": 1, "distancia_km": 3509.07, "dias_entrega": 14.0}, {"count": 1, "distancia_km": 3543.88, "dias_entrega": 24.0}, {"count": 1, "distancia_km": 3927.41, "dias_entrega": 21.0}, {"count": 1, "distancia_km": 4791.61, "dias_entrega": 27.0}, {"count": 1, "distancia_km": 5338.62, "dias_entrega": 25.0}, {"count": 1, "distancia_km": 5338.62, "dias_entrega": 29.0}, {"count": 1, "distancia_km": 8677.91, "dias_entrega": 27.0}], "dispersion_distancia_flete": [{"count": 21237, "distancia_km": 78.24, "freight_value": 9.83}, {"count": 8015, "distancia_km": 151.98, "freight_value": 17.35}, {"count": 989, "distancia_km": 114.76, "freight_value": 33.67}, {"count": 361, "distancia_km": 143.71, "freight_value": 46.14}, {"count": 184, "distancia_km": 146.83, "freight_value": 60.8}, {"count": 66, "distancia_km": 138.45, "freight_value": 74.17}, {"count": 45, "distancia_km": 127.62, "freight_value": 87.62}, {"count": 19, "distancia_km": 137.08, "freight_value": 100.84}, {"count": 8, "distancia_km": 191.75, "freight_value": 116.65}, {"count": 9, "distancia_km": 182.0, "freight_value": 130.22}, {"count": 3, "distancia_km": 209.73, "freight_value": 144.18}, {"count": 1, "distancia_km": 203.57, "freight_value": 174.49}, {"count": 2, "distancia_km": 230.23, "freight_value": 182.16}, {"count": 1, "distancia_km": 241.64, "freight_value": 321.46}, {"count": 5438, "distancia_km": 391.98, "freight_value": 11.44}, {"count": 24334, "distancia_km": 424.1, "freight_value": 17.33}, {"count": 1493, "distancia_km": 409.49, "freight_value": 33.35}, {"count": 763, "distancia_km": 413.9, "freight_value": 46.37}, {"count": 423, "distancia_km": 414.51, "freight_value": 61.28}, {"count": 160, "distancia_km": 417.38, "freight_value": 74.09}, {"count": 107, "distancia_km": 425.95, "freight_value": 87.95}, {"count": 72, "distancia_km": 435.46, "freight_value": 101.33}, {"count": 33, "distancia_km": 401.39, "freight_value": 115.58}, {"count": 26, "distancia_km": 430.63, "freight_value": 128.58}, {"count": 22, "distancia_km": 431.27, "freight_value": 142.93}, {"count": 16, "distancia_km": 442.74, "freight_value": 157.8}, {"count": 8, "distancia_km": 421.18, "freight_value": 169.87}, {"count": 1, "distancia_km": 509.45, "freight_value": 187.43}, {"count": 5, "distancia_km": 424.93, "freight_value": 195.64}, {"count": 1, "distancia_km": 327.63, "freight_value": 207.78}, {"count": 1, "distancia_km": 498.6, "freight_value": 252.35}, {"count": 1, "distancia_km": 415.45, "freight_value": 267.08}, {"count": 1, "distancia_km": 391.31, "freight_value": 306.06}, {"count": 1, "distancia_km": 433.07, "freight_value": 322.1}, {"count": 2, "distancia_km": 453.23, "freight_value": 375.28}, {"count": 568, "distancia_km": 697.99, "freight_value": 8.47}, {"count": 12871, "distancia_km": 727.74, "freight_value": 18.14}, {"count": 934, "distancia_km": 739.94, "freight_value": 32.71}, {"count": 413, "distancia_km": 732.46, "freight_value": 46.47}, {"count": 250, "distancia_km": 724.14, "freight_value": 60.91}, {"count": 111, "distancia_km": 737.22, "freight_value": 73.33}, {"count": 60, "distancia_km": 721.62, "freight_value": 87.51}, {"count": 53, "distancia_km": 727.02, "freight_value": 101.06}, {"count": 16, "distancia_km": 712.03, "freight_value": 116.16}, {"count": 24, "distancia_km": 736.97, "freight_value": 127.89}, {"count": 17, "distancia_km": 743.62, "freight_value": 144.52}, {"count": 5, "distancia_km": 738.82, "freight_value": 155.13}, {"count": 6, "distancia_km": 778.21, "freight_value": 171.74}, {"count": 5, "distancia_km": 752.45, "freight_value": 183.06}, {"count": 4, "distancia_km": 727.49, "freight_value": 196.98}, {"count": 2, "distancia_km": 709.03, "freight_value": 212.24}, {"count": 3, "distancia_km": 716.32, "freight_value": 224.47}, {"count": 1, "distancia_km": 660.7, "freight_value": 244.34}, {"count": 1, "distancia_km": 783.34, "freight_value": 250.42}, {"count": 1, "distancia_km": 703.56, "freight_value": 269.0}, {"count": 1, "distancia_km": 850.91, "freight_value": 294.76}, {"count": 1, "distancia_km": 632.25, "freight_value": 321.88}, {"count": 1, "distancia_km": 617.55, "freight_value": 339.59}, {"count": 142, "distancia_km": 983.44, "freight_value": 6.51}, {"count": 5938, "distancia_km": 973.45, "freight_value": 18.76}, {"count": 661, "distancia_km": 1002.46, "freight_value": 32.51}, {"count": 256, "distancia_km": 992.1, "freight_value": 46.81}, {"count": 117, "distancia_km": 979.53, "freight_value": 61.22}, {"count": 74, "distancia_km": 1016.33, "freight_value": 73.13}, {"count": 40, "distancia_km": 1011.88, "freight_value": 86.99}, {"count": 18, "distancia_km": 1018.67, "freight_value": 100.76}, {"count": 14, "distancia_km": 1031.05, "freight_value": 115.89}, {"count": 10, "distancia_km": 1051.09, "freight_value": 130.14}, {"count": 7, "distancia_km": 953.25, "freight_value": 147.95}, {"count": 2, "distancia_km": 1084.24, "freight_value": 158.76}, {"count": 4, "distancia_km": 1010.59, "freight_value": 166.91}, {"count": 2, "distancia_km": 1147.86, "freight_value": 188.41}, {"count": 1, "distancia_km": 895.68, "freight_value": 194.31}, {"count": 1, "distancia_km": 1036.74, "freight_value": 211.66}, {"count": 1, "distancia_km": 887.43, "freight_value": 222.38}, {"count": 1, "distancia_km": 996.49, "freight_value": 234.78}, {"count": 2, "distancia_km": 1071.96, "freight_value": 255.34}, {"count": 56, "distancia_km": 1303.89, "freight_value": 5.16}, {"count": 2067, "distancia_km": 1289.85, "freight_value": 20.2}, {"count": 560, "distancia_km": 1291.11, "freight_value": 33.11}, {"count": 168, "distancia_km": 1287.74, "freight_value": 47.34}, {"count": 79, "distancia_km": 1275.3, "freight_value": 59.91}, {"count": 38, "distancia_km": 1286.62, "freight_value": 74.33}, {"count": 25, "distancia_km": 1284.74, "freight_value": 87.53}, {"count": 10, "distancia_km": 1281.1, "freight_value": 102.29}, {"count": 10, "distancia_km": 1305.58, "freight_value": 116.24}, {"count": 9, "distancia_km": 1292.22, "freight_value": 128.81}, {"count": 4, "distancia_km": 1301.41, "freight_value": 144.22}, {"count": 4, "distancia_km": 1355.1, "freight_value": 156.54}, {"count": 2, "distancia_km": 1263.93, "freight_value": 185.71}, {"count": 3, "distancia_km": 1233.36, "freight_value": 197.82}, {"count": 1, "distancia_km": 1266.48, "freight_value": 293.27}, {"count": 34, "distancia_km": 1509.29, "freight_value": 6.54}, {"count": 1744, "distancia_km": 1540.13, "freight_value": 20.49}, {"count": 493, "distancia_km": 1577.69, "freight_value": 34.05}, {"count": 190, "distancia_km": 1589.16, "freight_value": 48.73}, {"count": 70, "distancia_km": 1587.72, "freight_value": 60.22}, {"count": 44, "distancia_km": 1623.98, "freight_value": 73.73}, {"count": 29, "distancia_km": 1551.71, "freight_value": 86.16}, {"count": 11, "distancia_km": 1576.34, "freight_value": 103.18}, {"count": 7, "distancia_km": 1633.0, "freight_value": 115.83}, {"count": 8, "distancia_km": 1540.26, "freight_value": 129.73}, {"count": 2, "distancia_km": 1512.79, "freight_value": 147.96}, {"count": 1, "distancia_km": 1452.16, "freight_value": 157.5}, {"count": 1, "distancia_km": 1610.4, "freight_value": 164.84}, {"count": 1, "distancia_km": 1599.27, "freight_value": 185.73}, {"count": 2, "distancia_km": 1626.74, "freight_value": 193.58}, {"count": 1, "distancia_km": 1546.69, "freight_value": 237.11}, {"count": 1, "distancia_km": 1498.34, "freight_value": 255.92}, {"count": 1, "distancia_km": 1689.12, "freight_value": 314.4}, {"count": 1, "distancia_km": 1708.13, "freight_value": 338.3}, {"count": 38, "distancia_km": 1883.16, "freight_value": 5.4}, {"count": 699, "distancia_km": 1890.53, "freight_value": 23.26}, {"count": 711, "distancia_km": 1895.97, "freight_value": 34.73}, {"count": 271, "distancia_km": 1894.12, "freight_value": 48.39}, {"count": 99, "distancia_km": 1889.62, "freight_value": 60.03}, {"count": 39, "distancia_km": 1869.2, "freight_value": 73.36}, {"count": 32, "distancia_km": 1890.32, "freight_value": 87.21}, {"count": 15, "distancia_km": 1880.92, "freight_value": 103.05}, {"count": 12, "distancia_km": 1878.11, "freight_value": 115.03}, {"count": 7, "distancia_km": 1929.85, "freight_value": 130.6}, {"count": 5, "distancia_km": 1864.12, "freight_value": 142.85}, {"count": 2, "distancia_km": 1790.35, "freight_value": 157.82}, {"count": 1, "distancia_km": 1875.4, "freight_value": 165.32}, {"count": 2, "distancia_km": 1985.27, "freight_value": 182.06}, {"count": 4, "distancia_km": 1949.75, "freight_value": 194.06}, {"count": 3, "distancia_km": 1784.75, "freight_value": 214.06}, {"count": 1, "distancia_km": 1991.97, "freight_value": 227.57}, {"count": 3, "distancia_km": 1937.14, "freight_value": 236.86}, {"count": 3, "distancia_km": 1926.42, "freight_value": 253.41}, {"count": 1, "distancia_km": 1880.12, "freight_value": 262.72}, {"count": 1, "distancia_km": 1762.87, "freight_value": 284.6}, {"count": 1, "distancia_km": 1864.72, "freight_value": 409.68}, {"count": 48, "distancia_km": 2170.33, "freight_value": 5.75}, {"count": 1249, "distancia_km": 2156.46, "freight_value": 22.8}, {"count": 1039, "distancia_km": 2170.81, "freight_value": 33.72}, {"count": 394, "distancia_km": 2162.21, "freight_value": 47.66}, {"count": 166, "distancia_km": 2156.82, "freight_value": 60.72}, {"count": 45, "distancia_km": 2158.84, "freight_value": 72.89}, {"count": 41, "distancia_km": 2148.07, "freight_value": 87.53}, {"count": 18, "distancia_km": 2156.26, "freight_value": 103.18}, {"count": 19, "distancia_km": 2158.29, "freight_value": 115.93}, {"count": 7, "distancia_km": 2214.34, "freight_value": 131.78}, {"count": 5, "distancia_km": 2129.08, "freight_value": 146.03}, {"count": 4, "distancia_km": 2241.24, "freight_value": 160.91}, {"count": 6, "distancia_km": 2205.05, "freight_value": 171.42}, {"count": 2, "distancia_km": 2181.6, "freight_value": 196.59}, {"count": 3, "distancia_km": 2175.65, "freight_value": 213.15}, {"count": 2, "distancia_km": 2105.51, "freight_value": 222.92}, {"count": 1, "distancia_km": 2127.61, "freight_value": 232.69}, {"count": 3, "distancia_km": 2131.9, "freight_value": 249.79}, {"count": 1, "distancia_km": 2133.51, "freight_value": 299.16}, {"count": 2, "distancia_km": 2187.28, "freight_value": 313.22}, {"count": 17, "distancia_km": 2389.65, "freight_value": 8.13}, {"count": 1023, "distancia_km": 2401.48, "freight_value": 21.59}, {"count": 492, "distancia_km": 2406.36, "freight_value": 32.5}, {"count": 207, "distancia_km": 2438.93, "freight_value": 46.37}, {"count": 97, "distancia_km": 2425.09, "freight_value": 62.06}, {"count": 30, "distancia_km": 2412.76, "freight_value": 72.67}, {"count": 21, "distancia_km": 2433.61, "freight_value": 87.76}, {"count": 14, "distancia_km": 2432.86, "freight_value": 101.82}, {"count": 8, "distancia_km": 2425.98, "freight_value": 115.84}, {"count": 9, "distancia_km": 2466.83, "freight_value": 129.97}, {"count": 2, "distancia_km": 2360.27, "freight_value": 144.29}, {"count": 3, "distancia_km": 2387.8, "freight_value": 153.28}, {"count": 1, "distancia_km": 2360.77, "freight_value": 173.23}, {"count": 5, "distancia_km": 2400.06, "freight_value": 184.72}, {"count": 1, "distancia_km": 2596.75, "freight_value": 193.28}, {"count": 3, "distancia_km": 2731.22, "freight_value": 9.0}, {"count": 144, "distancia_km": 2693.86, "freight_value": 24.0}, {"count": 165, "distancia_km": 2715.11, "freight_value": 31.57}, {"count": 82, "distancia_km": 2717.33, "freight_value": 46.21}, {"count": 46, "distancia_km": 2713.57, "freight_value": 61.84}, {"count": 9, "distancia_km": 2727.06, "freight_value": 74.57}, {"count": 18, "distancia_km": 2750.16, "freight_value": 87.46}, {"count": 8, "distancia_km": 2752.6, "freight_value": 103.13}, {"count": 2, "distancia_km": 2744.66, "freight_value": 110.28}, {"count": 3, "distancia_km": 2725.1, "freight_value": 127.93}, {"count": 2, "distancia_km": 2736.74, "freight_value": 141.84}, {"count": 1, "distancia_km": 2668.75, "freight_value": 162.08}, {"count": 3, "distancia_km": 2669.07, "freight_value": 170.36}, {"count": 1, "distancia_km": 2769.89, "freight_value": 210.09}, {"count": 1, "distancia_km": 2815.82, "freight_value": 245.75}, {"count": 1, "distancia_km": 2819.65, "freight_value": 317.47}, {"count": 5, "distancia_km": 3093.24, "freight_value": 19.76}, {"count": 64, "distancia_km": 3070.21, "freight_value": 34.0}, {"count": 13, "distancia_km": 3043.68, "freight_value": 47.19}, {"count": 25, "distancia_km": 3007.57, "freight_value": 61.2}, {"count": 8, "distancia_km": 2978.62, "freight_value": 76.14}, {"count": 13, "distancia_km": 3079.76, "freight_value": 85.25}, {"count": 1, "distancia_km": 3077.18, "freight_value": 99.3}, {"count": 1, "distancia_km": 2948.23, "freight_value": 109.96}, {"count": 2, "distancia_km": 3044.92, "freight_value": 141.23}, {"count": 1, "distancia_km": 2956.17, "freight_value": 175.55}, {"count": 1, "distancia_km": 2905.49, "freight_value": 192.48}, {"count": 7, "distancia_km": 3280.76, "freight_value": 25.46}, {"count": 34, "distancia_km": 3276.5, "freight_value": 31.78}, {"count": 10, "distancia_km": 3296.39, "freight_value": 45.36}, {"count": 5, "distancia_km": 3237.75, "freight_value": 60.86}, {"count": 1, "distancia_km": 3187.63, "freight_value": 81.85}, {"count": 1, "distancia_km": 3359.27, "freight_value": 84.39}, {"count": 1, "distancia_km": 3543.88, "freight_value": 38.04}, {"count": 1, "distancia_km": 3509.07, "freight_value": 47.09}, {"count": 1, "distancia_km": 3579.89, "freight_value": 84.94}, {"count": 1, "distancia_km": 3927.41, "freight_value": 34.88}, {"count": 1, "distancia_km": 4791.61, "freight_value": 20.8}, {"count": 2, "distancia_km": 5338.62, "freight_value": 29.24}, {"count": 1, "distancia_km": 8677.91, "freight_value": 25.6}], "atraso_vs_satisfaccion": [{"bucket_atraso": "<-7d (muy anticipado)", "review_prom": 4.23, "n_pedidos": 75744}, {"bucket_atraso": "-7 a -3d", "review_prom": 4.13, "n_pedidos": 9429}, {"bucket_atraso": "-3 a 0d", "review_prom": 4.06, "n_pedidos": 4270}, {"bucket_atraso": "0 a 3d (tarde)", "review_prom": 3.23, "n_pedidos": 1852}, {"bucket_atraso": "3 a 7d", "review_prom": 2.09, "n_pedidos": 1748}, {"bucket_atraso": ">7d (muy tarde)", "review_prom": 1.68, "n_pedidos": 2745}], "serie_tiempo_ventas": [{"mes_compra": "2016-09", "gmv": 354.75, "pedidos": 3}, {"mes_compra": "2016-10", "gmv": 56808.84, "pedidos": 308}, {"mes_compra": "2016-12", "gmv": 19.62, "pedidos": 1}, {"mes_compra": "2017-01", "gmv": 137188.49, "pedidos": 789}, {"mes_compra": "2017-02", "gmv": 286280.62, "pedidos": 1733}, {"mes_compra": "2017-03", "gmv": 432048.59, "pedidos": 2641}, {"mes_compra": "2017-04", "gmv": 412422.24, "pedidos": 2391}, {"mes_compra": "2017-05", "gmv": 586190.95, "pedidos": 3660}, {"mes_compra": "2017-06", "gmv": 502963.04, "pedidos": 3217}, {"mes_compra": "2017-07", "gmv": 584971.62, "pedidos": 3969}, {"mes_compra": "2017-08", "gmv": 668204.6, "pedidos": 4293}, {"mes_compra": "2017-09", "gmv": 720398.91, "pedidos": 4243}, {"mes_compra": "2017-10", "gmv": 769312.37, "pedidos": 4568}, {"mes_compra": "2017-11", "gmv": 1179143.77, "pedidos": 7451}, {"mes_compra": "2017-12", "gmv": 863547.23, "pedidos": 5624}, {"mes_compra": "2018-01", "gmv": 1107301.89, "pedidos": 7220}, {"mes_compra": "2018-02", "gmv": 986908.96, "pedidos": 6694}, {"mes_compra": "2018-03", "gmv": 1155126.82, "pedidos": 7188}, {"mes_compra": "2018-04", "gmv": 1159698.04, "pedidos": 6934}, {"mes_compra": "2018-05", "gmv": 1149781.82, "pedidos": 6853}, {"mes_compra": "2018-06", "gmv": 1022677.11, "pedidos": 6160}, {"mes_compra": "2018-07", "gmv": 1058728.03, "pedidos": 6273}, {"mes_compra": "2018-08", "gmv": 1003308.47, "pedidos": 6452}, {"mes_compra": "2018-09", "gmv": 166.46, "pedidos": 1}], "top_categorias": [{"product_category_name_english": "bed_bath_table", "ticket_prom": 111.71, "review_prom": 3.9, "volumen": 9417}, {"product_category_name_english": "health_beauty", "ticket_prom": 149.04, "review_prom": 4.14, "volumen": 8836}, {"product_category_name_english": "sports_leisure", "ticket_prom": 133.86, "review_prom": 4.11, "volumen": 7720}, {"product_category_name_english": "computers_accessories", "ticket_prom": 135.34, "review_prom": 3.93, "volumen": 6689}, {"product_category_name_english": "furniture_decor", "ticket_prom": 108.29, "review_prom": 3.91, "volumen": 6449}, {"product_category_name_english": "housewares", "ticket_prom": 111.77, "review_prom": 4.05, "volumen": 5884}, {"product_category_name_english": "watches_gifts", "ticket_prom": 217.92, "review_prom": 4.02, "volumen": 5624}, {"product_category_name_english": "telephony", "ticket_prom": 86.88, "review_prom": 3.95, "volumen": 4199}, {"product_category_name_english": "auto", "ticket_prom": 161.84, "review_prom": 4.07, "volumen": 3897}, {"product_category_name_english": "toys", "ticket_prom": 136.35, "review_prom": 4.16, "volumen": 3886}], "metodos_pago": [{"payment_type": "credit_card", "n_pagos": 76505, "cuotas_prom": 3.51, "valor_prom": 163.32}, {"payment_type": "boleto", "n_pagos": 19784, "cuotas_prom": 1.0, "valor_prom": 145.03}, {"payment_type": "voucher", "n_pagos": 3866, "cuotas_prom": 1.0, "valor_prom": 65.7}, {"payment_type": "debit_card", "n_pagos": 1528, "cuotas_prom": 1.0, "valor_prom": 142.57}, {"payment_type": "not_defined", "n_pagos": 3, "cuotas_prom": 1.0, "valor_prom": 0.0}], "top_estados_gmv": [{"customer_state": "SP", "gmv": 5921678.12, "pedidos": 41375}, {"customer_state": "RJ", "gmv": 2129681.98, "pedidos": 12762}, {"customer_state": "MG", "gmv": 1856161.49, "pedidos": 11544}, {"customer_state": "RS", "gmv": 885826.76, "pedidos": 5432}, {"customer_state": "PR", "gmv": 800935.44, "pedidos": 4998}, {"customer_state": "BA", "gmv": 611506.67, "pedidos": 3358}, {"customer_state": "SC", "gmv": 610213.6, "pedidos": 3612}, {"customer_state": "DF", "gmv": 353229.44, "pedidos": 2125}, {"customer_state": "GO", "gmv": 347706.93, "pedidos": 2007}, {"customer_state": "ES", "gmv": 324801.91, "pedidos": 2025}], "matriz_correlacion": {"columnas": ["price", "freight_value", "distancia_km", "dias_entrega", "review_score", "payment_installments"], "datos": [[1.0, 0.41, 0.08, 0.06, -0.0, 0.29], [0.41, 1.0, 0.39, 0.21, -0.04, 0.19], [0.08, 0.39, 1.0, 0.39, -0.05, 0.09], [0.06, 0.21, 0.39, 1.0, -0.3, 0.04], [-0.0, -0.04, -0.05, -0.3, 1.0, -0.04], [0.29, 0.19, 0.09, 0.04, -0.04, 1.0]]}}};
+
+function actualizarLeyendaFlujos(metricas) {
+  const cont = document.getElementById('leyenda-flujos');
+  cont.innerHTML = metricas.map(m =>
+    `<div class="fila-leyenda"><span class="punto" style="background:${m.colorHex}"></span>${m.titulo}</div>`
+  ).join('');
+}
+
+function obtenerMetricasSeleccionadas() {
+  const select1 = document.getElementById('select-flujo-1');
+  const select2 = document.getElementById('select-flujo-2');
+  if (select1.value === select2.value) {
+    select2.value = select1.value === 'volumen' ? 'satisfaccion' : 'volumen';
+  }
+  return [select1.value, select2.value].map(key => METRICAS_PREDEFINIDAS[key]);
+}
+
+function aplicarFlujosSeleccionados() {
+  metricasSeleccionadas = obtenerMetricasSeleccionadas();
+  actualizarLeyendaFlujos(metricasSeleccionadas);
+  construirEscenaDesdeFlujos(DATA.flujos_nacionales, metricasSeleccionadas);
+}
+
+function inicializarDashboard() {
+  document.getElementById('meta-info').textContent =
+    `${DATA.meta.total_pedidos.toLocaleString('es-CL')} pedidos · GMV ${DATA.meta.gmv_total_fmt} · ${DATA.meta.periodo}`;
+
+  document.getElementById('btn-csv-nacional').addEventListener('click', () => {
+    descargarTextoComoArchivo(arrayObjetosACSV(DATA.flujos_nacionales), 'flujos_nacionales.csv', 'text/csv');
+  });
+  document.getElementById('btn-csv-urbano').addEventListener('click', () => {
+    descargarTextoComoArchivo(arrayObjetosACSV(DATA.flujos_urbanos), 'flujos_urbanos_sao_paulo.csv', 'text/csv');
+  });
+  document.getElementById('btn-actualizar-flujos').addEventListener('click', aplicarFlujosSeleccionados);
+
+  actualizarLeyendaFlujos(metricasSeleccionadas);
+  construirEscenaDesdeFlujos(DATA.flujos_nacionales, metricasSeleccionadas);
+  renderEscena2D();
+  iniciarSecuencia();
+}
+
+Chart.defaults.color = '#b9c7c0';
+Chart.defaults.borderColor = 'rgba(255,255,255,0.08)';
+Chart.defaults.font.size = 10.5;
+
+window.addEventListener('load', inicializarDashboard);
+
+/* ---------------------------------------------------------------------- */
+/* Utilidades generales                                                    */
+/* ---------------------------------------------------------------------- */
+
+function esperar(ms) {
+  return new Promise(resolve => {
+    const inicio = performance.now();
+    function verificar() {
+      if (saltarFlag || performance.now() - inicio >= ms) resolve();
+      else requestAnimationFrame(verificar);
+    }
+    verificar();
+  });
+}
+
+function descargarTextoComoArchivo(texto, nombreArchivo, tipoMime) {
+  const blob = new Blob([texto], { type: tipoMime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = nombreArchivo; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function arrayObjetosACSV(filas) {
+  if (!filas || !filas.length) return '';
+  const columnas = Object.keys(filas[0]);
+  const lineas = [columnas.join(',')];
+  for (const fila of filas) lineas.push(columnas.map(c => fila[c]).join(','));
+  return lineas.join('\n');
+}
+
+function descargarCanvasComoJPEG(canvas, nombreArchivo) {
+  const tmp = document.createElement('canvas');
+  tmp.width = canvas.width; tmp.height = canvas.height;
+  const ctx = tmp.getContext('2d');
+  ctx.fillStyle = '#0a0e0d';
+  ctx.fillRect(0, 0, tmp.width, tmp.height);
+  ctx.drawImage(canvas, 0, 0);
+  const a = document.createElement('a');
+  a.href = tmp.toDataURL('image/jpeg', 0.92);
+  a.download = nombreArchivo;
+  a.click();
+}
+
+/* ---------------------------------------------------------------------- */
+/* Escena 2D (Canvas)                                                     */
+/* ---------------------------------------------------------------------- */
+
+const canvas = document.getElementById('escena-canvas');
+const ctx2d = canvas.getContext('2d');
+
+const METRICAS_PREDEFINIDAS = {
+  volumen: { campo: 'score_volumen', colorHex: '#3b82f6', titulo: 'Volumen de pedidos' },
+  satisfaccion: { campo: 'score_satisfaccion', colorHex: '#d946ef', titulo: 'Satisfacción' },
+};
+
+let metricasSeleccionadas = [METRICAS_PREDEFINIDAS.volumen, METRICAS_PREDEFINIDAS.satisfaccion];
+let particulasActivas = [];
+let arcosActivos = [];
+let nodosActivos = [];
+const ESCENA_TAMANO = 90;
+
+function ajustarCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+
+ajustarCanvas();
+
+function limpiarEscena2D() {
+  particulasActivas = [];
+  arcosActivos = [];
+  nodosActivos = [];
+  ctx2d.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+function colorPorIndice(indice) {
+  const t = Math.max(0, Math.min(100, indice)) / 100;
+  const c1 = [239, 68, 68];
+  const c2 = [245, 158, 11];
+  const c3 = [34, 197, 94];
+  let r, g, b;
+  if (t < 0.5) {
+    const u = t / 0.5;
+    r = Math.round(c1[0] + (c2[0] - c1[0]) * u);
+    g = Math.round(c1[1] + (c2[1] - c1[1]) * u);
+    b = Math.round(c1[2] + (c2[2] - c1[2]) * u);
+  } else {
+    const u = (t - 0.5) / 0.5;
+    r = Math.round(c2[0] + (c3[0] - c2[0]) * u);
+    g = Math.round(c2[1] + (c3[1] - c2[1]) * u);
+    b = Math.round(c2[2] + (c3[2] - c2[2]) * u);
+  }
+  return `rgb(${r},${g},${b})`;
+}
+
+function calcularBounds(flujos) {
+  const lats = [];
+  const lngs = [];
+  for (const f of flujos) {
+    lats.push(f.lat_origen, f.lat_destino);
+    lngs.push(f.lng_origen, f.lng_destino);
+  }
+  return {
+    latMin: Math.min(...lats),
+    latMax: Math.max(...lats),
+    lngMin: Math.min(...lngs),
+    lngMax: Math.max(...lngs),
+  };
+}
+
+function proyectar(lat, lng, bounds) {
+  const rangoLat = Math.max(bounds.latMax - bounds.latMin, 0.0001);
+  const rangoLng = Math.max(bounds.lngMax - bounds.lngMin, 0.0001);
+  const rango = Math.max(rangoLat, rangoLng);
+  const x = ((lng - (bounds.lngMin + bounds.lngMax) / 2) / rango) * ESCENA_TAMANO;
+  const y = -((lat - (bounds.latMin + bounds.latMax) / 2) / rango) * ESCENA_TAMANO;
+  return {
+    x: canvas.width * 0.5 + x * 0.8,
+    y: canvas.height * 0.5 + y * 0.8,
+  };
+}
+
+function normalizarScore(valor) { return Math.max(0.12, Math.min(1, valor / 100)); }
+
+function construirEscenaDesdeFlujos(flujos, metricas) {
+  limpiarEscena2D();
+  if (!flujos.length) return {};
+
+  const flujosVisibles = flujos.length > 80 ? flujos.slice(0, 80) : flujos;
+  const bounds = calcularBounds(flujosVisibles);
+
+  const nodos = new Map();
+  function registrarNodo(nombre, lat, lng, volumen, indice) {
+    const key = nombre;
+    if (!nodos.has(key)) nodos.set(key, { nombre, lat, lng, volumen: 0, sumaIndice: 0, n: 0 });
+    const n = nodos.get(key);
+    n.volumen += volumen; n.sumaIndice += indice; n.n += 1;
+  }
+
+  for (const f of flujos) {
+    registrarNodo(f.seller_state || f.seller_city, f.lat_origen, f.lng_origen, f.volumen, f.indice_desempeno);
+    registrarNodo(f.customer_state || f.customer_city, f.lat_destino, f.lng_destino, f.volumen, f.indice_desempeno);
+  }
+
+  const volMax = Math.max(...[...nodos.values()].map(n => n.volumen), 1);
+  for (const n of nodos.values()) {
+    const { x, y } = proyectar(n.lat, n.lng, bounds);
+    const indiceProm = n.sumaIndice / n.n;
+    const radio = 4 + 16 * Math.sqrt(n.volumen / volMax);
+    nodosActivos.push({ x, y, color: colorPorIndice(indiceProm), radio });
+  }
+
+  const offsets = [-0.9, 0.9];
+  for (const f of flujosVisibles) {
+    const o = proyectar(f.lat_origen, f.lng_origen, bounds);
+    const d = proyectar(f.lat_destino, f.lng_destino, bounds);
+    const dx = d.x - o.x, dy = d.y - o.y;
+    const dist = Math.hypot(dx, dy);
+    const px = dist < 1 ? 0 : -dy / dist;
+    const py = dist < 1 ? 1 : dx / dist;
+    const alturaArco = Math.max(40, dist * 0.25);
+
+    metricas.forEach((m, i) => {
+      const off = offsets[i];
+      const p0 = { x: o.x + px * off * 18, y: o.y + py * off * 18 };
+      const p2 = { x: d.x + px * off * 18, y: d.y + py * off * 18 };
+      const p1 = { x: (o.x + d.x) / 2 + px * off * 12, y: (o.y + d.y) / 2 - alturaArco };
+      const score = normalizarScore(f[m.campo]);
+      const color = m.colorHex;
+      arcosActivos.push({ p0, p1, p2, color, opacity: 0.15 + 0.55 * score, width: 2 + score * 2 });
+      particulasActivas.push({ curva: { p0, p1, p2 }, velocidad: 0.0008 + 0.0009 * score, fase: Math.random(), color, radius: 3 + score * 2 });
+    });
+  }
+
+  const ranking = [...nodos.values()].sort((a, b) => (b.sumaIndice / b.n) - (a.sumaIndice / a.n)).slice(0, 5);
+  const cont = document.getElementById('ranking-indice');
+  cont.innerHTML = '<b style="color:#eafff2; font-size:11.5px;">Índice de desempeño — top 5</b>' +
+    ranking.map(n => `<div><span>${n.nombre}</span><span>${(n.sumaIndice / n.n).toFixed(1)}</span></div>`).join('');
+
+  return { bounds };
+}
+
+function puntoBezier(p0, p1, p2, t) {
+  const u = 1 - t;
+  return {
+    x: u * u * p0.x + 2 * u * t * p1.x + t * t * p2.x,
+    y: u * u * p0.y + 2 * u * t * p1.y + t * t * p2.y,
+  };
+}
+
+function actualizarParticulas() {
+  const t = performance.now();
+  for (const p of particulasActivas) {
+    const u = (t * p.velocidad + p.fase) % 1;
+    p.pos = puntoBezier(p.curva.p0, p.curva.p1, p.curva.p2, u);
+  }
+}
+
+function renderEscena2D() {
+  ctx2d.clearRect(0, 0, canvas.width, canvas.height);
+  ctx2d.fillStyle = 'rgba(10,14,13,0.16)';
+  ctx2d.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx2d.lineCap = 'round';
+  ctx2d.lineJoin = 'round';
+  for (const arco of arcosActivos) {
+    ctx2d.beginPath();
+    ctx2d.moveTo(arco.p0.x, arco.p0.y);
+    ctx2d.quadraticCurveTo(arco.p1.x, arco.p1.y, arco.p2.x, arco.p2.y);
+    ctx2d.strokeStyle = arco.color;
+    ctx2d.globalAlpha = arco.opacity;
+    ctx2d.lineWidth = arco.width;
+    ctx2d.stroke();
+  }
+  ctx2d.globalAlpha = 1;
+
+  for (const nodo of nodosActivos) {
+    ctx2d.beginPath();
+    ctx2d.arc(nodo.x, nodo.y, nodo.radio, 0, Math.PI * 2);
+    ctx2d.fillStyle = nodo.color;
+    ctx2d.fill();
+    ctx2d.strokeStyle = 'rgba(255,255,255,0.14)';
+    ctx2d.lineWidth = 1;
+    ctx2d.stroke();
+  }
+
+  for (const p of particulasActivas) {
+    if (!p.pos) continue;
+    ctx2d.beginPath();
+    ctx2d.arc(p.pos.x, p.pos.y, p.radius, 0, Math.PI * 2);
+    ctx2d.fillStyle = p.color;
+    ctx2d.fill();
+  }
+}
+
+function animar() {
+  requestAnimationFrame(animar);
+  actualizarParticulas();
+  renderEscena2D();
+}
+animar();
+
+window.addEventListener('resize', () => {
+  ajustarCanvas();
+  const mc = document.getElementById('matrix-canvas');
+  mc.width = window.innerWidth; mc.height = window.innerHeight;
+});
+
+function moverCamara(destinoPos, destinoLookAt, duracionMs) {
+  return esperar(duracionMs);
+}
+
+/* ---------------------------------------------------------------------- */
+/* Paneles estadísticos                                                    */
+/* ---------------------------------------------------------------------- */
+
+function crearCard(id, titulo) {
+  const card = document.createElement('div');
+  card.className = 'card-panel';
+  card.id = 'card-' + id;
+  card.innerHTML = `<h4>${titulo}</h4><canvas id="canvas-${id}"></canvas>
+    <div class="card-botones">
+      <button data-accion="csv">CSV</button>
+      <button data-accion="jpeg">JPEG</button>
+    </div>`;
+  return card;
+}
+
+function dibujarHeatmapCorrelacion(canvas, columnas, matriz) {
+  canvas.width = 260; canvas.height = 220;
+  const ctx = canvas.getContext('2d');
+  const margenIzq = 62, margenSup = 14, n = columnas.length;
+  const celda = Math.min((canvas.width - margenIzq) / n, (canvas.height - margenSup) / n);
+  ctx.font = '9px sans-serif';
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      const v = matriz[i][j];
+      const t = (v + 1) / 2;
+      const c1 = [239, 68, 68], c2 = [34, 197, 94];
+      const r = Math.round(c1[0] + (c2[0] - c1[0]) * t);
+      const g = Math.round(c1[1] + (c2[1] - c1[1]) * t);
+      const b = Math.round(c1[2] + (c2[2] - c1[2]) * t);
+      ctx.fillStyle = `rgb(${r},${g},${b})`;
+      ctx.fillRect(margenIzq + j * celda, margenSup + i * celda, celda - 2, celda - 2);
+      ctx.fillStyle = 'rgba(0,0,0,0.75)';
+      ctx.fillText(v.toFixed(2), margenIzq + j * celda + 4, margenSup + i * celda + celda / 2 + 3);
+    }
+    ctx.fillStyle = '#b9c7c0';
+    ctx.fillText(columnas[i].slice(0, 9), 2, margenSup + i * celda + celda / 2 + 3);
+  }
+}
+
+const registroDescargas = {};
+
+function registrarPanel(id, filasCSV) {
+  registroDescargas[id] = filasCSV;
+  const card = document.getElementById('card-' + id);
+  card.querySelector('[data-accion="csv"]').addEventListener('click', () => {
+    descargarTextoComoArchivo(arrayObjetosACSV(registroDescargas[id]), id + '.csv', 'text/csv');
+  });
+  card.querySelector('[data-accion="jpeg"]').addEventListener('click', () => {
+    descargarCanvasComoJPEG(document.getElementById('canvas-' + id), id + '.jpeg');
+  });
+}
+
+function construirPaneles() {
+  const contenedor = document.getElementById('sidebar-paneles');
+  const paneles = [];
+
+  function construirCuandoVisible(card, panel) {
+    const observer = new IntersectionObserver((entries, obs) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          const canvas = card.querySelector('canvas');
+          panel.build(canvas);
+          obs.unobserve(card);
+          card.classList.add('visible');
+        }
+      }
+    }, { root: contenedor, threshold: 0.35 });
+    observer.observe(card);
+  }
+
+  // 1. dispersión distancia vs tiempo de entrega
+  paneles.push({ id: 'distancia_vs_entrega', titulo: 'Distancia vs. días de entrega', build: (canvas) => {
+    new Chart(canvas, { type: 'scatter', data: { datasets: [{ data: DATA.stats.dispersion_distancia_entrega.map(d => ({ x: d.distancia_km, y: d.dias_entrega, r: Math.max(1, Math.log2(d.count + 1)) })), backgroundColor: 'rgba(59,130,246,0.5)', pointRadius: (ctx) => ctx.raw.r || 2 }] },
+      options: { plugins: { legend: { display: false } }, scales: { x: { title: { display: true, text: 'km' } }, y: { title: { display: true, text: 'días' } } } } });
+    registrarPanel('distancia_vs_entrega', DATA.stats.dispersion_distancia_entrega);
+  }});
+
+  // 2. dispersión distancia vs flete
+  paneles.push({ id: 'distancia_vs_flete', titulo: 'Distancia vs. costo de flete', build: (canvas) => {
+    new Chart(canvas, { type: 'scatter', data: { datasets: [{ data: DATA.stats.dispersion_distancia_flete.map(d => ({ x: d.distancia_km, y: d.freight_value, r: Math.max(1, Math.log2(d.count + 1)) })), backgroundColor: 'rgba(245,158,11,0.5)', pointRadius: (ctx) => ctx.raw.r || 2 }] },
+      options: { plugins: { legend: { display: false } }, scales: { x: { title: { display: true, text: 'km' } }, y: { title: { display: true, text: 'R$' } } } } });
+    registrarPanel('distancia_vs_flete', DATA.stats.dispersion_distancia_flete);
+  }});
+
+  // 3. atraso vs satisfacción
+  paneles.push({ id: 'atraso_vs_satisfaccion', titulo: 'Atraso vs. satisfacción', build: (canvas) => {
+    const d = DATA.stats.atraso_vs_satisfaccion;
+    new Chart(canvas, { type: 'bar', data: { labels: d.map(x => x.bucket_atraso), datasets: [{ data: d.map(x => x.review_prom), backgroundColor: '#d946ef' }] },
+      options: { plugins: { legend: { display: false } }, scales: { x: { ticks: { font: { size: 8 } } }, y: { title: { display: true, text: 'review prom.' } } } } });
+    registrarPanel('atraso_vs_satisfaccion', d);
+  }});
+
+  // 4. matriz de correlación
+  paneles.push({ id: 'matriz_correlacion', titulo: 'Correlación entre variables', build: (canvas) => {
+    dibujarHeatmapCorrelacion(canvas, DATA.stats.matriz_correlacion.columnas, DATA.stats.matriz_correlacion.datos);
+    const filas = DATA.stats.matriz_correlacion.columnas.map((c, i) => {
+      const fila = { variable: c };
+      DATA.stats.matriz_correlacion.columnas.forEach((c2, j) => fila[c2] = DATA.stats.matriz_correlacion.datos[i][j]);
+      return fila;
+    });
+    registrarPanel('matriz_correlacion', filas);
+  }});
+
+  // 5. serie de tiempo de ventas
+  paneles.push({ id: 'serie_tiempo_ventas', titulo: 'GMV mensual', build: (canvas) => {
+    const d = DATA.stats.serie_tiempo_ventas;
+    new Chart(canvas, { type: 'line', data: { labels: d.map(x => x.mes_compra), datasets: [{ data: d.map(x => x.gmv), borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,0.15)', fill: true, tension: 0.3, pointRadius: 0 }] },
+      options: { plugins: { legend: { display: false } }, scales: { x: { ticks: { font: { size: 7 }, maxRotation: 90 } } } } });
+    registrarPanel('serie_tiempo_ventas', d);
+  }});
+
+  // 6. top categorías
+  paneles.push({ id: 'top_categorias', titulo: 'Top categorías (ticket promedio)', build: (canvas) => {
+    const d = DATA.stats.top_categorias;
+    new Chart(canvas, { type: 'bar', data: { labels: d.map(x => x.product_category_name_english), datasets: [{ data: d.map(x => x.ticket_prom), backgroundColor: '#3b82f6' }] },
+      options: { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { y: { ticks: { font: { size: 7.5 } } } } } });
+    registrarPanel('top_categorias', d);
+  }});
+
+  // 7. métodos de pago
+  paneles.push({ id: 'metodos_pago', titulo: 'Métodos de pago', build: (canvas) => {
+    const d = DATA.stats.metodos_pago;
+    new Chart(canvas, { type: 'doughnut', data: { labels: d.map(x => x.payment_type), datasets: [{ data: d.map(x => x.n_pagos), backgroundColor: ['#3b82f6', '#22c55e', '#f59e0b', '#d946ef', '#94a3b8'] }] },
+      options: { plugins: { legend: { position: 'bottom', labels: { font: { size: 8.5 }, boxWidth: 8 } } } } });
+    registrarPanel('metodos_pago', d);
+  }});
+
+  // 8. top estados por GMV
+  paneles.push({ id: 'top_estados_gmv', titulo: 'Top estados por GMV', build: (canvas) => {
+    const d = DATA.stats.top_estados_gmv;
+    new Chart(canvas, { type: 'bar', data: { labels: d.map(x => x.customer_state), datasets: [{ data: d.map(x => x.gmv), backgroundColor: '#22c55e' }] },
+      options: { indexAxis: 'y', plugins: { legend: { display: false } } } });
+    registrarPanel('top_estados_gmv', d);
+  }});
+
+  paneles.forEach(p => {
+    const card = crearCard(p.id, p.titulo);
+    contenedor.appendChild(card);
+    construirCuandoVisible(card, p);
+  });
+  return paneles;
+}
+
+async function revelarPaneles(paneles, delayMs = 120) {
+  for (const p of paneles) {
+    document.getElementById('card-' + p.id).classList.add('visible');
+    await esperar(delayMs);
+  }
+}
+
+/* ---------------------------------------------------------------------- */
+/* Ruleta final                                                            */
+/* ---------------------------------------------------------------------- */
+
+function iniciarRuleta(paneles) {
+  document.getElementById('sidebar-paneles').classList.add('oculto-clase');
+  const contenedor = document.getElementById('ruleta-contenedor');
+  const ring = document.getElementById('ruleta-ring');
+  contenedor.classList.add('activa');
+
+  const n = paneles.length;
+  const radio = 420;
+  paneles.forEach((p, i) => {
+    const original = document.getElementById('card-' + p.id);
+    original.classList.remove('card-panel');
+    original.classList.add('card-ruleta');
+    original.style.transform = `rotateY(${(360 / n) * i}deg) translateZ(${radio}px)`;
+    ring.appendChild(original);
+  });
+}
+
+/* ---------------------------------------------------------------------- */
+/* Disolución matrix (tecla Enter)                                         */
+/* ---------------------------------------------------------------------- */
+
+let matrixActivo = false;
+function iniciarDisolucionMatrix() {
+  if (matrixActivo) return;
+  matrixActivo = true;
+  saltarFlag = true;
+
+  document.getElementById('app-ui').style.opacity = '0';
+
+  const mc = document.getElementById('matrix-canvas');
+  mc.classList.remove('oculto');
+  mc.width = window.innerWidth; mc.height = window.innerHeight;
+  mc.style.opacity = '1';
+  const ctx = mc.getContext('2d');
+  const fontSize = 16;
+  const columnas = Math.floor(mc.width / fontSize);
+  const gotas = new Array(columnas).fill(1);
+
+  const intervalo = setInterval(() => {
+    ctx.fillStyle = 'rgba(5,8,6,0.08)';
+    ctx.fillRect(0, 0, mc.width, mc.height);
+    ctx.fillStyle = '#22c55e';
+    ctx.font = fontSize + 'px monospace';
+    for (let i = 0; i < gotas.length; i++) {
+      const texto = Math.random() > 0.5 ? '1' : '0';
+      ctx.fillText(texto, i * fontSize, gotas[i] * fontSize);
+      if (gotas[i] * fontSize > mc.height && Math.random() > 0.975) gotas[i] = 0;
+      gotas[i]++;
+    }
+  }, 45);
+
+  setTimeout(() => {
+    canvas.remove();
+    const msg = document.createElement('div');
+    msg.id = 'mensaje-final';
+    msg.innerText = 'Fin de la demo — Geografía de ventas & Dashboard 360 · Olist Brazilian E-commerce';
+    document.body.appendChild(msg);
+  }, 4500);
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') iniciarDisolucionMatrix();
+});
+
+/* ---------------------------------------------------------------------- */
+/* Secuencia automática                                                     */
+/* ---------------------------------------------------------------------- */
+
+let saltarFlag = false;
+document.getElementById('btn-saltar').addEventListener('click', () => { saltarFlag = true; });
+
+async function iniciarSecuencia() {
+  const etiqueta = document.getElementById('etiqueta-escena');
+
+  etiqueta.textContent = 'Vista nacional: corrientes de pedidos entre estados';
+  construirEscenaDesdeFlujos(DATA.flujos_nacionales, metricasSeleccionadas);
+  await esperar(600);
+
+  etiqueta.textContent = 'Haciendo zoom al entorno urbano de São Paulo…';
+  construirEscenaDesdeFlujos(DATA.flujos_urbanos, metricasSeleccionadas);
+  await esperar(900);
+
+  etiqueta.textContent = 'Zoom urbano: São Paulo — flujos entre zonas de la ciudad';
+  await esperar(400);
+
+  etiqueta.textContent = 'Análisis estadístico de las variables del negocio';
+  const paneles = construirPaneles();
+  await revelarPaneles(paneles, 120);
+
+  etiqueta.textContent = 'Ruleta de análisis — descarga CSV y JPEG desde cada tarjeta';
+  saltarFlag = false;
+  iniciarRuleta(paneles);
+}
+
+</script>
+</body>
+</html>
