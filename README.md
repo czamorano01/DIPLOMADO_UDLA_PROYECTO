@@ -74,26 +74,3 @@ tests/test_metrics.py     Tests unitarios (haversine, normalización, índice co
 outputs/                  CSVs + dashboard_flujos.html + dashboard_estadisticas.html + mapa_animado.html
 logs/                     pipeline.log (rotativo, 5 MB x 3 respaldos)
 ```
-
-## Cómo se mapea a la rúbrica
-
-| Criterio | Cómo se cubre |
-|---|---|
-| Funcionalidad (30%) | El pipeline corre de punta a punta sobre el dataset completo (98.666 pedidos) y produce todos los outputs definidos. |
-| Calidad del código (20%) | Módulos separados por responsabilidad, funciones documentadas, manejo de errores en la carga (`try/except` con logging), tests unitarios con `pytest`. |
-| Buenas prácticas (15%) | Sin credenciales hardcodeadas, configuración externalizada en `config.yaml`, pipeline idempotente (se puede re-ejecutar sin efectos secundarios). |
-| Integración cloud (15%) | **Pendiente para Unidad 2/3** — ver sección "Próximos pasos". |
-| Componente IA (10%) | **Pendiente para Unidad 3** — ver sección "Próximos pasos". |
-| Presentación y valor de negocio (10%) | Tres dashboards enfocados en resultados estadísticos: flujos/desempeño logístico, panel de negocio y mapa animado de flujos nacionales, livianos y sin dependencias frágiles. |
-
-## Próximos pasos sugeridos (Unidad 2 y 3)
-
-- **Unidad 2**: mover la carga desde `data/raw/` a Parquet, y subir los CSV de
-  `outputs/` a un bucket S3 (usando `boto3` con credenciales desde variables de
-  entorno, nunca en el código).
-- **Unidad 3**: agregar un componente de IA que genere el "resumen para
-  gerencia" del dashboard (por ejemplo, llamando a la API de Claude con los
-  datasets agregados como contexto) y una fuente adicional vía API externa
-  (ej. clima por región, para cruzar con atrasos de entrega).
-
-Con gusto seguimos armando esa parte cuando quieras.
